@@ -323,22 +323,24 @@ with tab1:
         if user_input.strip():
             with st.spinner("🎼 Composing your musical masterpiece..."):
                 musical_options = {
-                    'tempo': tempo,
-                    'key_root': KEY_PRESETS[key_center],
-                    'scale_type': scale_type,
-                    'add_harmony': add_harmony,
-                    'add_bass': add_bass,
-                    'add_drums': add_drums,
-                    'chord_progression': chord_prog,
-                    'melody_instrument': INSTRUMENT_PRESETS[melody_inst],
-                    'harmony_instrument': INSTRUMENT_PRESETS[harmony_inst],
-                    'bass_instrument': INSTRUMENT_PRESETS[bass_inst]
-                }
-                
-                try:
-                    midi_path, wav_path, morse_code = generate_enhanced_files_from_text(
-                        user_input, **musical_options
-                    )
+    'tempo': settings['tempo'],
+    'key_root': KEY_PRESETS['C'],
+    'scale_type': settings['scale_type'],
+    'add_harmony': settings['add_harmony'],
+    'add_bass': settings['add_bass'],
+    'add_drums': settings['add_drums'],
+    'chord_progression': settings['chord_prog'],
+    'melody_instrument': INSTRUMENT_PRESETS[settings['melody_inst']],
+    'harmony_instrument': INSTRUMENT_PRESETS[settings['harmony_inst']],
+    'bass_instrument': INSTRUMENT_PRESETS[settings['bass_inst']],
+    'style': preset,  # ADD THIS LINE
+    'original_message': user_input  # ADD THIS LINE
+}
+
+try:
+    midi_path, wav_path, morse_code = generate_enhanced_files_from_text(
+        user_input, **musical_options
+    )
                     
                     if midi_path and os.path.exists(midi_path):
                         st.success("✅ Musical Composition Complete!")
