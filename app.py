@@ -242,37 +242,41 @@ with tab1:
                         user_input, **musical_options
                     )
                     
-                    if midi_path and wav_path:
-                        st.success("✅ AI-Enhanced Musical Composition Complete!")
-                        
-                        # Display composition info
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write("**🔤 Encoded Message:**")
-                            st.code(user_input.upper())
-                            st.write("**📻 Morse Code:**")
-                            st.code(morse_code)
-                        
-                        with col2:
-                            st.write("**🎼 Musical Arrangement:**")
-                            arrangement_info = [
-                                f"🎹 Melody: {melody_inst}",
-                                f"🎵 Key: {key_center} {scale_type}",
-                                f"⏱️ Tempo: {tempo} BPM",
-                                f"🤖 Style: {st.session_state.get('style', 'Custom')}"
-                            ]
-                            if add_harmony:
-                                harmony_type = "AI Smart Harmony" if ai_harmony else "Standard Harmony"
-                                arrangement_info.append(f"🎶 {harmony_type}: {harmony_inst}")
-                            if add_bass:
-                                bass_type = "Walking Bass" if walking_bass else "Standard Bass"
-                                arrangement_info.append(f"🎸 {bass_type}: {bass_inst}")
-                            if add_drums:
-                                arrangement_info.append("🥁 Drums: Enhanced Kit")
-                            
-                            for info in arrangement_info:
-                                st.write(info)
+                  # In the generate button section, around line where you handle downloads
+if midi_path and wav_path:
+    st.success("✅ AI-Enhanced Musical Composition Complete!")
+    # ... existing code ...
+    
+    # Audio player - only show if WAV exists
+    if wav_path and os.path.exists(wav_path):
+        st.subheader("🎧 Listen to Your Composition")
+        st.audio(wav_path, format='audio/wav')
+    else:
+        st.info("🎵 MIDI file generated successfully! WAV playback not available on this platform.")
+    
+    # Download buttons
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # MIDI download (this should always work)
+        with open(midi_path, "rb") as f:
+            midi_bytes = f.read()
+        # ... rest of MIDI download code ...
+    
+    with col2:
+        # WAV download - only show if file exists
+        if wav_path and os.path.exists(wav_path):
+            with open(wav_path, "rb") as f:
+                wav_bytes = f.read()
+            st.download_button(
+                "🎵 Download Audio File",
+                wav_bytes,
+                file_name=filename,
+                mime="audio/wav",
+                use_container_width=True
+            )
+        else:
+            st.info("WAV download not available - MIDI works on all platforms!")
                         
                         # Audio player with enhanced controls
                         st.subheader("🎧 Listen to Your Composition")
