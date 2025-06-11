@@ -1,6 +1,8 @@
 import streamlit as st
 import mido
 import os
+import json
+import base64
 from enhanced_morse_music import (
     generate_enhanced_files_from_text, 
     INSTRUMENT_PRESETS, 
@@ -28,6 +30,202 @@ st.set_page_config(page_title="Enhanced Morse Melody Studio", layout="wide")
 
 st.title("🎵 Enhanced Morse Melody Studio")
 st.caption("Create rich, musical compositions while encoding secret messages in Morse code")
+
+def midi_to_json(midi_path):
+    """Convert MIDI file to JSON for web audio playback"""
+    try:
+        mid = mido.MidiFile(midi_path)
+        notes = []
+        
+        for i, track in enumerate(mid.tracks):
+            current_time = 0
+            active_notes = {}
+            
+            for msg in track:
+                current_time += msg.time
+                
+                if msg.type == 'note_on' and msg.velocity > 0:
+                    active_notes[msg.note] = {
+                        'start': current_time / mid.ticks_per_beat,
+                        'note': msg.note,
+                        'velocity': msg.velocity,
+                        'track': i
+                    }
+                elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+                    if msg.note in active_notes:
+                        note_info = active_notes[msg.note]
+                        note_info['duration'] = (current_time / mid.ticks_per_beat) - note_info['start']
+                        notes.append(note_info)
+                        del active_notes[msg.note]
+        
+        return json.dumps(notes)
+    except:
+        return "[]"
+
+def create_audio_player(midi_json_data, tempo=120):
+    """Create a web audio player for MIDI data"""
+    audio_html = f"""
+    <div style="background: #f0f2f6; padding: 20px; border-radius: 10px; margin: 10px 0;">
+        <h4>🎧 Audio Player</h4>
+        <button id="playBtn" onclick="togglePlay()" style="
+            background: #ff6b6b; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        ">▶️ Play</button>
+        <button onclick="stopAudio()" style="
+            background: #666; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer;
+            font-size: 16px;
+        ">⏹️ Stop</button>
+        <div id="progress" style="
+            width: 100%; 
+            height: 10px; 
+            background: #ddd; 
+            border-radius: 5px; 
+            margin: 10px 0;
+            overflow: hidden;
+        ">
+            <div id="progressBar" style="
+                width: 0%; 
+                height: 100%; 
+                background: #ff6b6b; 
+                transition: width 0.1s;
+            "></div>
+        </div>
+        <span id="timeDisplay">0:00 / 0:00</span>
+    </div>
+
+    <script>
+    let audioContext;
+    let isPlaying = false;
+    let startTime;
+    let pauseTime = 0;
+    let scheduledNotes = [];
+    let totalDuration = 0;
+    
+    const midiData = {midi_json_data};
+    const tempo = {tempo};
+    
+    // Calculate total duration
+    if (midiData.length > 0) {{
+        totalDuration = Math.max(...midiData.map(note => note.start + note.duration)) * (60 / tempo);
+    }}
+    
+    function midiToFreq(midiNote) {{
+        return 440 * Math.pow(2, (midiNote - 69) / 12);
+    }}
+    
+    function formatTime(seconds) {{
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${{mins}}:${{secs.toString().padStart(2, '0')}}`;
+    }}
+    
+    function updateProgress() {{
+        if (isPlaying && startTime) {{
+            const elapsed = (audioContext.currentTime - startTime + pauseTime) * (tempo / 60);
+            const progress = Math.min(elapsed / Math.max(...midiData.map(note => note.start + note.duration)) * 100, 100);
+            document.getElementById('progressBar').style.width = progress + '%';
+            
+            const currentTime = elapsed * (60 / tempo);
+            document.getElementById('timeDisplay').textContent = 
+                `${{formatTime(currentTime)}} / ${{formatTime(totalDuration)}}`;
+            
+            if (progress < 100) {{
+                requestAnimationFrame(updateProgress);
+            }} else {{
+                stopAudio();
+            }}
+        }}
+    }}
+    
+    function playNote(frequency, startTime, duration, velocity = 80) {{
+        if (!audioContext) return;
+        
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(frequency, startTime);
+        oscillator.type = 'triangle';
+        
+        const volume = (velocity / 127) * 0.1;
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+        
+        return oscillator;
+    }}
+    
+    async function togglePlay() {{
+        if (!audioContext) {{
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }}
+        
+        if (audioContext.state === 'suspended') {{
+            await audioContext.resume();
+        }}
+        
+        if (!isPlaying) {{
+            startTime = audioContext.currentTime;
+            isPlaying = true;
+            document.getElementById('playBtn').innerHTML = '⏸️ Pause';
+            
+            // Schedule all notes
+            midiData.forEach(note => {{
+                const frequency = midiToFreq(note.note);
+                const startTime = audioContext.currentTime + (note.start - pauseTime) * (60 / tempo);
+                const duration = note.duration * (60 / tempo);
+                
+                if (startTime >= audioContext.currentTime) {{
+                    const oscillator = playNote(frequency, startTime, duration, note.velocity);
+                    scheduledNotes.push(oscillator);
+                }}
+            }});
+            
+            updateProgress();
+        }} else {{
+            pauseTime += audioContext.currentTime - startTime;
+            stopAudio();
+        }}
+    }}
+    
+    function stopAudio() {{
+        isPlaying = false;
+        document.getElementById('playBtn').innerHTML = '▶️ Play';
+        
+        scheduledNotes.forEach(oscillator => {{
+            try {{
+                oscillator.stop();
+            }} catch(e) {{}}
+        }});
+        scheduledNotes = [];
+        
+        pauseTime = 0;
+        document.getElementById('progressBar').style.width = '0%';
+        document.getElementById('timeDisplay').textContent = `0:00 / ${{formatTime(totalDuration)}}`;
+    }}
+    
+    // Initialize display
+    document.getElementById('timeDisplay').textContent = `0:00 / ${{formatTime(totalDuration)}}`;
+    </script>
+    """
+    
+    return audio_html
 
 tab1, tab2 = st.tabs(["🎼 Compose & Encode", "🔍 Decode & Analyze"])
 
@@ -171,12 +369,16 @@ with tab1:
                             for info in arrangement_info:
                                 st.write(info)
                         
-                        # Audio player
+                        # Web Audio Player
                         st.subheader("🎧 Listen to Your Composition")
+                        midi_json = midi_to_json(midi_path)
+                        audio_player_html = create_audio_player(midi_json, tempo)
+                        st.components.v1.html(audio_player_html, height=200)
+                        
+                        # Also show traditional audio player if WAV exists
                         if wav_path and os.path.exists(wav_path):
+                            st.write("**Or use the built-in audio player:**")
                             st.audio(wav_path, format='audio/wav')
-                        else:
-                            st.info("🎵 MIDI file generated! Download it below to play in any music software.")
                         
                         # Download buttons
                         st.subheader("📥 Download Your Files")
@@ -372,6 +574,24 @@ with tab2:
                     st.subheader("🎯 Hidden Message Revealed")
                     st.success(f"**{decoded_text.strip().upper()}**")
                     
+                    # Web audio playback for uploaded file too
+                    st.subheader("🎧 Listen to Uploaded Composition")
+                    # Save uploaded file temporarily
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as tmp_file:
+                        tmp_file.write(uploaded_midi.getvalue())
+                        tmp_midi_path = tmp_file.name
+                    
+                    uploaded_midi_json = midi_to_json(tmp_midi_path)
+                    uploaded_audio_player = create_audio_player(uploaded_midi_json, 120)  # Default tempo
+                    st.components.v1.html(uploaded_audio_player, height=200)
+                    
+                    # Clean up temp file
+                    try:
+                        os.unlink(tmp_midi_path)
+                    except:
+                        pass
+                    
                     # Detailed analysis
                     with st.expander("🔍 Detailed Analysis"):
                         st.write("**Note Statistics:**")
@@ -462,18 +682,19 @@ with st.sidebar:
     
     st.header("💡 Platform Notes")
     st.info("""
-    **MIDI vs WAV Files:**
-    - MIDI files work on all platforms
-    - Can be opened in any music software
-    - Perfect quality preservation
-    - Smaller file sizes for sharing
+    **Enhanced Audio Playback:**
+    - Web Audio API creates real-time synthesis
+    - Works on all modern browsers
+    - No additional software required
+    - High-quality sound generation
     
-    Audio playback may not be available on all hosting platforms, but MIDI files contain all the musical information!
+    MIDI files also work in any music software!
     """)
     
     st.header("🚀 What's New")
     st.success("""
     **Enhanced Features:**
+    - 🎧 **Web Audio Playback** - Listen in any browser
     - Multiple musical instrument tracks
     - Chord progressions and harmony
     - Bass lines with musical patterns
