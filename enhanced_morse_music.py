@@ -1,29 +1,4 @@
-from midiutil import MIDIFile
-import os
-import random
-import tempfile
-import subprocess
-import math
-from collections import deque
-
-# Morse code dictionary (unchanged)
-MORSE_CODE_DICT = {
-    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 
-    'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---',
-    'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---',
-    'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-',
-    'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--',
-    'Z': '--..', '1': '.----', '2': '..---', '3': '...--', '4': '....-', 
-    '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', 
-    '0': '-----', ' ': '/'
-}
-
-# Enhanced musical scales
-SCALES = {
-    'major': [0, 2, 4, 5, 7, 9, 11],
-    'minor': [0, 2, 3, 5, 7, 8, 10],
-    'pentatonic': [0, 2, 4, 7, 9],
-    'blues': [0, 3, 5, 6, 7, 10],
+'blues': [0, 3, 5, 6, 7, 10],
     'dorian': [0, 2, 3, 5, 7, 9, 10],
     'mixolydian': [0, 2, 4, 5, 7, 9, 10]
 }
@@ -758,7 +733,7 @@ def morse_to_ai_enhanced_midi(morse_code, output_file, **kwargs):
             harmony_time += chord_duration
             chord_index += 1
     
-    # Add bass and drums (same as before)
+    # Add bass and drums
     if add_bass:
         bass_time = 0
         chord_duration = duration_unit * 8
@@ -831,16 +806,16 @@ def morse_to_ai_enhanced_midi(morse_code, output_file, **kwargs):
         midi.writeFile(f)
 
 def midi_to_wav(midi_path, wav_path, soundfont_path=None):
-    """Convert MIDI to WAV using FluidSynth"""
+    """Convert MIDI to WAV using FluidSynth with cloud deployment error handling"""
     if soundfont_path is None:
         print("WAV generation skipped - no soundfont provided")
-        return
+        return False
         
     try:
         # Check if soundfont exists
         if not os.path.exists(soundfont_path):
             print(f"Soundfont not found at {soundfont_path}")
-            return
+            return False
             
         # Run FluidSynth to convert MIDI to WAV
         result = subprocess.run([
@@ -851,76 +826,28 @@ def midi_to_wav(midi_path, wav_path, soundfont_path=None):
             "-F",
             wav_path,
             "-r", "44100"
-        ], capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print(f"FluidSynth error: {result.stderr}")
-        else:
-            print(f"Successfully generated WAV file: {wav_path}")
-            
-    except FileNotFoundError:
-        print("WAV generation skipped - fluidsynth not found. Install with: brew install fluidsynth")
-    except Exception as e:
-        print(f"Error generating WAV: {e}")
-
-def enhanced_midi_to_wav(midi_path, wav_path):
-    """Enhanced MIDI to WAV conversion with better quality"""
-    
-    # Try multiple soundfont locations
-    soundfont_paths = [
-        os.path.expanduser("~/soundfonts/FluidR3_GM.sf2"),
-        "/usr/share/soundfonts/FluidR3_GM.sf2",
-        "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls",
-        "FluidR3_GM.sf2"  # Local directory
-    ]
-    
-    soundfont_path = None
-    for path in soundfont_paths:
-        if os.path.exists(path):
-            soundfont_path = path
-            break
-    
-    if not soundfont_path:
-        print("No soundfont found - WAV generation skipped")
-        return
-        
-    try:
-        # Enhanced FluidSynth command with better quality settings
-        cmd = [
-            "fluidsynth",
-            "-ni",  # No interactive mode
-            "-g", "0.8",  # Gain
-            "-r", "44100",  # Sample rate
-            "-c", "2",  # Stereo channels
-            "-z", "1024",  # Buffer size for better quality
-            "-T", "oss",  # Audio driver
-            soundfont_path,
-            midi_path,
-            "-F", wav_path
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, timeout=30)
         
         if result.returncode == 0:
-            print(f"Successfully generated enhanced WAV: {wav_path}")
+            print(f"Successfully generated WAV file: {wav_path}")
+            return True
         else:
             print(f"FluidSynth error: {result.stderr}")
-            # Fallback: try simpler command
-            simple_cmd = ["fluidsynth", "-ni", soundfont_path, midi_path, "-F", wav_path]
-            result = subprocess.run(simple_cmd, capture_output=True, text=True, timeout=30)
-            if result.returncode == 0:
-                print(f"Generated WAV with fallback method: {wav_path}")
+            return False
             
     except subprocess.TimeoutExpired:
         print("FluidSynth timed out - try a shorter message")
+        return False
     except FileNotFoundError:
-        print("FluidSynth not found - install with: brew install fluidsynth (Mac) or apt install fluidsynth (Linux)")
+        print("WAV generation skipped - fluidsynth not found")
+        return False
     except Exception as e:
         print(f"Error generating WAV: {e}")
+        return False
 
 def generate_enhanced_files_from_text(text, **musical_options):
     """
-    Generate AI-enhanced musical files from text with full customization
+    Generate AI-enhanced musical files from text with cloud deployment support
     
     All original musical options plus new AI features:
     - ai_harmony: Intelligent chord progressions that follow melody
@@ -945,18 +872,47 @@ def generate_enhanced_files_from_text(text, **musical_options):
         musical_options.get('smart_dynamics', False)
     ])
     
-    if use_ai:
-        # Use the new AI-enhanced function
-        morse_to_ai_enhanced_midi(morse, midi_path, **musical_options)
-    else:
-        # Use the original function for compatibility
-        morse_to_enhanced_midi(morse, midi_path, **musical_options)
+    try:
+        if use_ai:
+            # Use the new AI-enhanced function
+            morse_to_ai_enhanced_midi(morse, midi_path, **musical_options)
+        else:
+            # Use the original function for compatibility
+            morse_to_enhanced_midi(morse, midi_path, **musical_options)
+        
+        # Verify MIDI file was created
+        if not os.path.exists(midi_path):
+            raise Exception("MIDI file generation failed")
+        
+        # Try to convert to WAV (may fail on cloud platforms)
+        wav_success = False
+        try:
+            # Try multiple soundfont locations
+            soundfont_paths = [
+                os.path.expanduser("~/soundfonts/FluidR3_GM.sf2"),
+                "/usr/share/soundfonts/FluidR3_GM.sf2",
+                "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls"
+            ]
+            
+            for soundfont_path in soundfont_paths:
+                if os.path.exists(soundfont_path):
+                    wav_success = midi_to_wav(midi_path, wav_path, soundfont_path)
+                    if wav_success:
+                        break
+            
+            if not wav_success:
+                print("WAV generation not available on this platform - MIDI file ready for download")
+                wav_path = None
+        
+        except Exception as wav_error:
+            print(f"WAV generation failed: {wav_error}")
+            wav_path = None
     
-    # Convert to WAV
-    soundfont_path = os.path.expanduser("~/soundfonts/FluidR3_GM.sf2")
-    midi_to_wav(midi_path, wav_path, soundfont_path)
-    
-    return midi_path, wav_path, morse
+        return midi_path, wav_path, morse
+        
+    except Exception as e:
+        print(f"Error in file generation: {e}")
+        raise e
 
 # Enhanced instrument presets with better categorization
 INSTRUMENT_PRESETS = {
@@ -990,4 +946,30 @@ INSTRUMENT_PRESETS = {
 KEY_PRESETS = {
     'C': 60, 'C#/Db': 61, 'D': 62, 'D#/Eb': 63, 'E': 64, 'F': 65,
     'F#/Gb': 66, 'G': 67, 'G#/Ab': 68, 'A': 69, 'A#/Bb': 70, 'B': 71
+}# This is the same complete file as before, but with fixed WAV generation
+from midiutil import MIDIFile
+import os
+import random
+import tempfile
+import subprocess
+import math
+from collections import deque
+
+# Morse code dictionary (unchanged)
+MORSE_CODE_DICT = {
+    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 
+    'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---',
+    'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---',
+    'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-',
+    'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--',
+    'Z': '--..', '1': '.----', '2': '..---', '3': '...--', '4': '....-', 
+    '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', 
+    '0': '-----', ' ': '/'
 }
+
+# Enhanced musical scales
+SCALES = {
+    'major': [0, 2, 4, 5, 7, 9, 11],
+    'minor': [0, 2, 3, 5, 7, 8, 10],
+    'pentatonic': [0, 2, 4, 7, 9],
+    'blues':
