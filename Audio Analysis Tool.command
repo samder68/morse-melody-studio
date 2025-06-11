@@ -1,0 +1,20 @@
+#!/bin/bash
+echo "=================================================="
+echo "      AUDIO ANALYSIS TOOL - STARTING UP"
+echo "=================================================="
+echo ""
+cd "$(dirname "$0")"
+echo "Installing required components..."
+python3 -m pip install -r requirements.txt --quiet --user
+echo "Components installed successfully."
+echo ""
+echo "Starting Audio Analysis Tool..."
+echo "The app will open in your default web browser."
+echo ""
+echo "Local access URL: http://localhost:8501"
+echo ""
+echo "IMPORTANT: Keep this window open while using the app."
+echo "To stop the app, close this window or press Ctrl+C"
+echo ""
+echo "=================================================="
+python3 -m streamlit run app.py
