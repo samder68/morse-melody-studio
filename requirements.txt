@@ -1,4 +1,3 @@
-streamlit>=1.28.0
+streamlit
 midiutil==1.2.1
 mido==1.3.0
-numpy>=1.21.0
