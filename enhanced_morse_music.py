@@ -1,49 +1,36 @@
-# Fixed and Enhanced Version: `enhanced_morse_music_randomized.py`
-# ✔ Uses MotifGenerator to introduce phrase variation
-# ✔ Integrates properly into Morse structure
-# ✔ Avoids shared motif between message runs
+# enhanced_morse_music_randomized.py — FINAL & FUNCTIONAL
+# ✅ Fully randomized yet melodic Morse-to-MIDI generator
+# ✅ Motifs stay in scale, with each phrase a musical variation
+# ✅ Output: melodic .mid file that feels alive, not robotic
 
 from midiutil import MIDIFile
-import os
 import random
-import tempfile
-import subprocess
 
-# Motif Generator with variation and proper state control
+# Motif Generator
 class MotifGenerator:
-    def __init__(self, scale_notes, seed=None):
+    def __init__(self, scale_notes, motif_size=4):
         self.scale_notes = scale_notes
-        self.memory = []
-        self.motif_size = 4
-        self.current_motif = []
-        self.seed = seed or random.randint(1000, 9999)
-        self.symbol_counter = 0
-        random.seed(self.seed)
+        self.motif_size = motif_size
+        self.motif = []
+        self.symbol_count = 0
 
-    def _clamp(self, note):
-        options = self.scale_notes + [n + 12 for n in self.scale_notes] + [n - 12 for n in self.scale_notes]
-        return min(options, key=lambda x: abs(x - note))
-
-    def generate_motif(self):
+    def generate_new_motif(self):
         base = random.choice(self.scale_notes)
-        return [self._clamp(base + random.choice([-2, -1, 0, 1, 2])) for _ in range(self.motif_size)]
+        self.motif = [self._snap_to_scale(base + random.choice([-4, -2, 0, 2, 4])) for _ in range(self.motif_size)]
+        self.symbol_count = 0
 
-    def next_motif(self):
-        if not self.memory or random.random() < 0.4:
-            motif = self.generate_motif()
-            self.memory.append(motif)
-        else:
-            motif = random.choice(self.memory)
-        self.current_motif = motif
-        return motif
+    def _snap_to_scale(self, note):
+        candidates = self.scale_notes + [n + 12 for n in self.scale_notes] + [n - 12 for n in self.scale_notes]
+        return min(candidates, key=lambda x: abs(x - note))
 
     def get_note(self):
-        if not self.current_motif or self.symbol_counter % self.motif_size == 0:
-            self.next_motif()
-        note = self.current_motif[self.symbol_counter % self.motif_size]
-        self.symbol_counter += 1
+        if self.symbol_count % self.motif_size == 0:
+            self.generate_new_motif()
+        note = self.motif[self.symbol_count % self.motif_size]
+        self.symbol_count += 1
         return note
 
+# Morse Code and Music Parameters
 MORSE_CODE_DICT = {
     'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.', 'G': '--.', 'H': '....',
     'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---', 'P': '.--.',
@@ -51,54 +38,47 @@ MORSE_CODE_DICT = {
     'Y': '-.--', 'Z': '--..', '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....',
     '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----', ' ': '/'
 }
+SCALES = {'major': [0, 2, 4, 5, 7, 9, 11], 'minor': [0, 2, 3, 5, 7, 8, 10]}
+KEYS = {'C': 60, 'D': 62, 'E': 64, 'F': 65, 'G': 67, 'A': 69, 'B': 71}
 
-SCALES = {
-    'major': [0, 2, 4, 5, 7, 9, 11],
-    'minor': [0, 2, 3, 5, 7, 8, 10]
-}
-
-INSTRUMENTS = {
-    'Piano': 0, 'Strings': 48, 'Bass': 32
-}
-
-KEY_PRESETS = {
-    'C': 60, 'D': 62, 'E': 64, 'F': 65, 'G': 67, 'A': 69, 'B': 71
-}
-
+# Main Functions
 def text_to_morse(text):
     return ' '.join(MORSE_CODE_DICT.get(c.upper(), '') for c in text)
 
-def get_scale_notes(root, scale):
-    return [root + i for i in SCALES[scale]]
+def get_scale_notes(key_root, scale_type):
+    return [key_root + interval for interval in SCALES[scale_type]]
 
-def generate_randomized_morse_music(message, output_file, tempo=100, key='C', scale='major'):
-    morse = text_to_morse(message)
-    root_pitch = KEY_PRESETS[key]
-    scale_notes = get_scale_notes(root_pitch, scale)
+def generate_random_music(text, output_file, tempo=90, key='C', scale_type='major'):
+    morse = text_to_morse(text)
+    root = KEYS[key]
+    scale = get_scale_notes(root, scale_type)
+    motif_gen = MotifGenerator(scale)
 
     midi = MIDIFile(1)
     midi.addTempo(0, 0, tempo)
-    midi.addProgramChange(0, 0, 0, INSTRUMENTS['Piano'])
+    midi.addProgramChange(0, 0, 0, 0)  # Piano
 
-    motif_gen = MotifGenerator(scale_notes)
-    time = 0
     dot = 0.5 * 60 / tempo
     dash = 1.5 * 60 / tempo
+    time = 0
 
-    for symbol in morse:
-        if symbol in ['.', '-']:
+    for char in morse:
+        if char == '.':
             pitch = motif_gen.get_note()
-            dur = dot if symbol == '.' else dash
-            midi.addNote(0, 0, pitch, time, dur, 90)
-            time += dur + 0.1
-        elif symbol == ' ':
+            midi.addNote(0, 0, pitch, time, dot, 100)
+            time += dot + 0.1
+        elif char == '-':
+            pitch = motif_gen.get_note()
+            midi.addNote(0, 0, pitch, time, dash, 100)
+            time += dash + 0.1
+        elif char == ' ':
             time += dot * 2
-        elif symbol == '/':
+        elif char == '/':
             time += dot * 4
 
     with open(output_file, 'wb') as f:
         midi.writeFile(f)
 
-if __name__ == "__main__":
-    generate_randomized_morse_music("Hope is the frequency", "morse_final.mid", tempo=90, key='C')
-    print("✅ Your updated Morse melody with random motifs is ready!")
+if __name__ == '__main__':
+    generate_random_music("Hope is the frequency", "morse_final_output.mid")
+    print("✅ MIDI file generated: morse_final_output.mid")
