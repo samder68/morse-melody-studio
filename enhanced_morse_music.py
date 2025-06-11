@@ -472,9 +472,13 @@ def generate_enhanced_files_from_text(text, **musical_options):
             os.path.expanduser("~/Music/soundfonts/FluidR3_GM.sf2")
         ]
         
-        for soundfont_path in soundfont_paths:
+        if 'soundfont_override' in kwargs and kwargs['soundfont_override']:
+        soundfont_paths.insert(0, kwargs['soundfont_override'])
+
+    for soundfont_path in soundfont_paths:
             if os.path.exists(soundfont_path):
-                wav_success = midi_to_wav(midi_path, wav_path, soundfont_path)
+                print(f'✅ Using SoundFont: {soundfont_path}')
+        wav_success = midi_to_wav(midi_path, wav_path, soundfont_path)
                 if wav_success:
                     break
     except:

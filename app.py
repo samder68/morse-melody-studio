@@ -106,7 +106,8 @@ def create_audio_player(midi_json_data, tempo=120):
         <span id="timeDisplay">0:00 / 0:00</span>
     </div>
 
-    <script>
+    <script src="https://unpkg.com/soundfont-player@0.15.4/dist/soundfont-player.min.js"></script>
+<script>
     let audioContext;
     let isPlaying = false;
     let startTime;
@@ -150,7 +151,8 @@ def create_audio_player(midi_json_data, tempo=120):
         }}
     }}
     
-    function playNote(frequency, startTime, duration, velocity = 80) {{
+    // function playNote(frequency, startTime, duration, velocity = 80) {
+// Deprecated for soundfont-player based playback{
         if (!audioContext) return;
         
         const oscillator = audioContext.createOscillator();
@@ -173,7 +175,23 @@ def create_audio_player(midi_json_data, tempo=120):
         return oscillator;
     }}
     
-    async function togglePlay() {{
+    async function togglePlay() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (!isPlaying) {
+            Soundfont.instrument(audioContext, 'acoustic_grand_piano').then(function(piano) {
+                startTime = audioContext.currentTime;
+                isPlaying = true;
+                document.getElementById('playBtn').innerHTML = '⏸️ Pause';
+                midiData.forEach(note => {
+                    const start = audioContext.currentTime + (note.start - pauseTime) * (60 / tempo);
+                    const duration = note.duration * (60 / tempo);
+                    piano.play(note.note, start, { duration });
+                });
+                updateProgress();
+            });
+        }{
         if (!audioContext) {{
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }}
@@ -320,7 +338,14 @@ with tab1:
         else:
             chord_prog = 'classic'
     
-    # Generate button
+    
+    sound_quality = st.selectbox("Audio Rendering Quality", ["Default", "High-Quality"], index=0)
+    soundfont_override = None
+    if sound_quality == "High-Quality":
+        soundfont_override = os.path.expanduser("~/soundfonts/Arachno.sf2")
+    musical_options['soundfont_override'] = soundfont_override
+    
+# Generate button
     if st.button("🎵 Generate Musical Composition", type="primary", use_container_width=True):
         if user_input.strip():
             with st.spinner("🎼 Composing your musical masterpiece..."):
