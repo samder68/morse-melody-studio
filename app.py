@@ -733,6 +733,115 @@ def create_midi_file(melody_notes: List[Note], harmony_notes: List[Note] = None)
     midi.writeFile(midi_bytes)
     return midi_bytes.getvalue()
 
+def generate_svg_sheet_music(melody_notes: List[Note], message: str, key_info: dict) -> str:
+    """Generate simple SVG sheet music"""
+    
+    # SVG dimensions
+    width = 800
+    height = 400
+    staff_top = 100
+    staff_spacing = 15
+    
+    svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="{width}" height="{height}" fill="white" stroke="black" stroke-width="2"/>
+    
+    <!-- Title -->
+    <text x="{width//2}" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold">
+        🎵 Morse Code Melody: {message.upper()}
+    </text>
+    <text x="{width//2}" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#666">
+        Key: {key_info.get('name', 'C Major')} | 🔴 = Dots (.) | 🔵 = Dashes (-)
+    </text>
+    
+    <!-- Staff lines -->'''
+    
+    # Draw 5 staff lines
+    for i in range(5):
+        y = staff_top + i * staff_spacing
+        svg_content += f'\n    <line x1="50" y1="{y}" x2="{width-50}" y2="{y}" stroke="black" stroke-width="1"/>'
+    
+    # Add treble clef (simplified)
+    svg_content += f'\n    <text x="70" y="{staff_top + 2*staff_spacing + 5}" font-family="serif" font-size="40" fill="black">𝄞</text>'
+    
+    # Convert message to morse for reference
+    morse_sequence = []
+    for char in message.upper():
+        if char in MORSE_CODE:
+            morse_sequence.extend(list(MORSE_CODE[char]))
+            morse_sequence.append(' ')
+        elif char == ' ':
+            morse_sequence.append('/')
+    
+    # Draw notes
+    x_pos = 120
+    morse_index = 0
+    
+    for i, note in enumerate(melody_notes[:16]):  # Limit to 16 notes for readability
+        # Calculate staff position (middle C = line 2)
+        midi_60_position = staff_top + 2 * staff_spacing  # Middle C position
+        semitone_spacing = staff_spacing / 2
+        note_y = midi_60_position - (note.pitch - 60) * semitone_spacing
+        
+        # Determine note type and color
+        if note.duration <= 0.3:  # Dot
+            note_symbol = "♪"
+            color = "#FF6B6B"  # Red
+        else:  # Dash
+            note_symbol = "♩"
+            color = "#4ECDC4"  # Blue
+        
+        # Draw note
+        svg_content += f'\n    <text x="{x_pos}" y="{note_y + 5}" text-anchor="middle" font-family="serif" font-size="24" fill="{color}">{note_symbol}</text>'
+        
+        # Add morse code annotation
+        if morse_index < len(morse_sequence) and morse_sequence[morse_index] in '.-':
+            morse_char = morse_sequence[morse_index]
+            svg_content += f'\n    <text x="{x_pos}" y="{staff_top - 10}" text-anchor="middle" font-family="Arial" font-size="14" font-weight="bold" fill="{color}">{morse_char}</text>'
+            morse_index += 1
+        elif morse_index < len(morse_sequence):
+            morse_index += 1
+        
+        # Add note name below staff
+        note_name = get_note_name_simple(note.pitch)
+        svg_content += f'\n    <text x="{x_pos}" y="{staff_top + 5*staff_spacing + 20}" text-anchor="middle" font-family="Arial" font-size="10" fill="#666">{note_name}</text>'
+        
+        # Add ledger lines if needed
+        if note_y < staff_top:  # Above staff
+            ledger_lines_needed = int((staff_top - note_y) // staff_spacing) + 1
+            for line_num in range(1, ledger_lines_needed + 1):
+                ledger_y = staff_top - line_num * staff_spacing
+                if ledger_y >= note_y - 5:
+                    svg_content += f'\n    <line x1="{x_pos - 15}" y1="{ledger_y}" x2="{x_pos + 15}" y2="{ledger_y}" stroke="black" stroke-width="1"/>'
+        elif note_y > staff_top + 4 * staff_spacing:  # Below staff
+            ledger_lines_needed = int((note_y - (staff_top + 4 * staff_spacing)) // staff_spacing) + 1
+            for line_num in range(1, ledger_lines_needed + 1):
+                ledger_y = staff_top + 4 * staff_spacing + line_num * staff_spacing
+                if ledger_y <= note_y + 5:
+                    svg_content += f'\n    <line x1="{x_pos - 15}" y1="{ledger_y}" x2="{x_pos + 15}" y2="{ledger_y}" stroke="black" stroke-width="1"/>'
+        
+        x_pos += 40
+        
+        # Start new line if needed
+        if x_pos > width - 100 and i < len(melody_notes) - 1:
+            break
+    
+    # Add morse code reference at bottom
+    full_morse = " ".join(MORSE_CODE.get(c.upper(), '') for c in message if c.upper() in MORSE_CODE)
+    svg_content += f'''
+    
+    <!-- Morse code reference -->
+    <text x="50" y="{height - 40}" font-family="Arial, sans-serif" font-size="12" fill="#333">
+        Morse Code: {full_morse}
+    </text>
+    <text x="50" y="{height - 20}" font-family="Arial, sans-serif" font-size="10" fill="#666">
+        Generated by Intelligent Morse Melody Studio - Music Education Tool
+    </text>
+</svg>'''
+    
+    return svg_content
+
 def generate_simple_score_text(melody_notes: List[Note], message: str, key_info: dict) -> str:
     """Generate a simple text-based musical score for educational purposes"""
     
@@ -1104,7 +1213,22 @@ def main():
                         midi_data = create_midi_file(melody_notes, harmony_notes)
                         wav_data = generate_wav_from_notes(melody_notes, harmony_notes)
                         score_text = generate_simple_score_text(melody_notes, message, key.value)
+                        svg_sheet_music = generate_svg_sheet_music(melody_notes, message, key.value)
                         analysis_text = generate_educational_analysis(melody_notes, message, key.value, style.value)
+                        
+                        # Generate a random song ID for filename
+                        import time
+                        song_id = f"song_{int(time.time()) % 100000:05d}"
+                        
+                        # Store generated data in session state to prevent regeneration
+                        st.session_state['current_midi_data'] = midi_data
+                        st.session_state['current_wav_data'] = wav_data
+                        st.session_state['current_score_text'] = score_text
+                        st.session_state['current_svg_sheet'] = svg_sheet_music
+                        st.session_state['current_analysis_text'] = analysis_text
+                        st.session_state['current_song_id'] = song_id
+                        st.session_state['current_key_name'] = key.name
+                        st.session_state['current_style_name'] = style.name
                         
                         # Success message
                         st.success("✨ **Beautiful melody created!**")
@@ -1145,59 +1269,87 @@ def main():
                             else:
                                 st.write("🎶 **Harmony:** None")
                         
-                        # Download section
+                        # Download section - use session state data
                         st.subheader("📥 Download Your Complete Musical Package")
                         
-                        download_col1, download_col2, download_col3, download_col4 = st.columns(4)
+                        # Get data from session state (prevents regeneration on each download)
+                        midi_data = st.session_state.get('current_midi_data', b'')
+                        wav_data = st.session_state.get('current_wav_data', b'')
+                        score_text = st.session_state.get('current_score_text', '')
+                        svg_sheet = st.session_state.get('current_svg_sheet', '')
+                        analysis_text = st.session_state.get('current_analysis_text', '')
+                        song_id = st.session_state.get('current_song_id', 'unknown')
+                        key_name = st.session_state.get('current_key_name', 'C_MAJOR')
+                        style_name = st.session_state.get('current_style_name', 'CLASSICAL')
                         
-                        # Generate a random song ID for filename
-                        import time
-                        song_id = f"song_{int(time.time()) % 100000:05d}"  # Creates "song_12345" format
+                        download_col1, download_col2, download_col3, download_col4, download_col5 = st.columns(5)
                         
                         with download_col1:
-                            filename = f"melody_{song_id}_{key.name}_{style.name}.mid"
-                            st.download_button(
-                                label="🎼 MIDI File",
-                                data=midi_data,
-                                file_name=filename,
-                                mime="audio/midi",
-                                use_container_width=True,
-                                help="For music software!"
-                            )
+                            if midi_data:
+                                filename = f"melody_{song_id}_{key_name}_{style_name}.mid"
+                                st.download_button(
+                                    label="🎼 MIDI File",
+                                    data=midi_data,
+                                    file_name=filename,
+                                    mime="audio/midi",
+                                    use_container_width=True,
+                                    help="For music software!",
+                                    key="midi_download"
+                                )
                         
                         with download_col2:
                             if wav_data:
-                                wav_filename = f"melody_{song_id}_{key.name}_{style.name}.wav"
+                                wav_filename = f"melody_{song_id}_{key_name}_{style_name}.wav"
                                 st.download_button(
                                     label="🎵 WAV Audio",
                                     data=wav_data,
                                     file_name=wav_filename,
                                     mime="audio/wav",
                                     use_container_width=True,
-                                    help="High-quality audio!"
+                                    help="High-quality audio!",
+                                    key="wav_download"
                                 )
-                            else:
-                                st.error("WAV generation failed")
                         
                         with download_col3:
-                            st.download_button(
-                                label="🎼 Musical Score",
-                                data=score_text,
-                                file_name=f"score_{song_id}.txt",
-                                mime="text/plain",
-                                use_container_width=True,
-                                help="Text-based music notation!"
-                            )
+                            if svg_sheet:
+                                st.download_button(
+                                    label="🎼 Sheet Music",
+                                    data=svg_sheet.encode('utf-8'),
+                                    file_name=f"sheet_music_{song_id}.svg",
+                                    mime="image/svg+xml",
+                                    use_container_width=True,
+                                    help="Visual sheet music!",
+                                    key="sheet_download"
+                                )
                         
                         with download_col4:
-                            st.download_button(
-                                label="🎓 Educational Analysis",
-                                data=analysis_text,
-                                file_name=f"analysis_{song_id}.txt",
-                                mime="text/plain",
-                                use_container_width=True,
-                                help="Complete learning guide!"
-                            )
+                            if score_text:
+                                st.download_button(
+                                    label="📝 Text Score",
+                                    data=score_text,
+                                    file_name=f"score_{song_id}.txt",
+                                    mime="text/plain",
+                                    use_container_width=True,
+                                    help="Text-based notation!",
+                                    key="score_download"
+                                )
+                        
+                        with download_col5:
+                            if analysis_text:
+                                st.download_button(
+                                    label="🎓 Analysis",
+                                    data=analysis_text,
+                                    file_name=f"analysis_{song_id}.txt",
+                                    mime="text/plain",
+                                    use_container_width=True,
+                                    help="Educational guide!",
+                                    key="analysis_download"
+                                )
+                        
+                        # Show sheet music preview
+                        if svg_sheet:
+                            st.subheader("🎼 Sheet Music Preview")
+                            st.components.v1.html(f'<div style="text-align: center;">{svg_sheet}</div>', height=450)
                         
                         # Educational insights
                         st.subheader("🎓 Educational Insights")
