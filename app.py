@@ -1003,8 +1003,12 @@ def main():
                         
                         download_col1, download_col2, download_col3 = st.columns(3)
                         
+                        # Generate a random song ID for filename
+                        import time
+                        song_id = f"song_{int(time.time()) % 100000:05d}"  # Creates "song_12345" format
+                        
                         with download_col1:
-                            filename = f"morse_melody_{message[:10].replace(' ', '_')}_{key.name}_{style.name}.mid"
+                            filename = f"melody_{song_id}_{key.name}_{style.name}.mid"
                             st.download_button(
                                 label="🎼 Download MIDI File",
                                 data=midi_data,
@@ -1016,7 +1020,7 @@ def main():
                         
                         with download_col2:
                             if wav_data:
-                                wav_filename = f"morse_melody_{message[:10].replace(' ', '_')}_{key.name}_{style.name}.wav"
+                                wav_filename = f"melody_{song_id}_{key.name}_{style.name}.wav"
                                 st.download_button(
                                     label="🎵 Download WAV Audio",
                                     data=wav_data,
@@ -1046,7 +1050,7 @@ Advanced Musical AI System
                             st.download_button(
                                 label="📄 Download Info",
                                 data=info_text,
-                                file_name=f"melody_info_{message[:10].replace(' ', '_')}.txt",
+                                file_name=f"melody_info_{song_id}.txt",
                                 mime="text/plain",
                                 use_container_width=True
                             )
