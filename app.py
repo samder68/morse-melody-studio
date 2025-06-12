@@ -3,6 +3,9 @@ import random
 import math
 import tempfile
 import os
+import numpy as np
+import wave
+import struct
 from midiutil import MIDIFile
 import mido
 from typing import List, Tuple
@@ -557,6 +560,136 @@ def create_web_audio_player(melody_notes: List[Note], harmony_notes: List[Note] 
     
     return audio_html
 
+def generate_wav_from_notes(melody_notes: List[Note], harmony_notes: List[Note] = None, sample_rate: int = 44100) -> bytes:
+    """Generate a WAV file directly from note data using pure Python audio synthesis"""
+    
+    # Combine all notes
+    all_notes = melody_notes.copy()
+    if harmony_notes:
+        all_notes.extend(harmony_notes)
+    
+    if not all_notes:
+        return b""
+    
+    # Calculate total duration
+    total_duration = max(note.start_time + note.duration for note in all_notes)
+    total_samples = int(total_duration * sample_rate)
+    
+    # Create stereo audio buffer
+    audio_left = np.zeros(total_samples, dtype=np.float32)
+    audio_right = np.zeros(total_samples, dtype=np.float32)
+    
+    for note in all_notes:
+        # Convert MIDI note to frequency
+        frequency = 440.0 * (2.0 ** ((note.pitch - 69) / 12.0))
+        
+        # Calculate sample positions
+        start_sample = int(note.start_time * sample_rate)
+        duration_samples = int(note.duration * sample_rate)
+        end_sample = min(start_sample + duration_samples, total_samples)
+        
+        if start_sample >= total_samples:
+            continue
+        
+        # Generate time array for this note
+        t = np.linspace(0, note.duration, end_sample - start_sample)
+        
+        # Create waveform based on channel (melody vs harmony)
+        if note.channel == 0:  # Melody
+            # Rich harmonic content for melody
+            wave = (np.sin(2 * np.pi * frequency * t) * 0.6 +
+                   np.sin(2 * np.pi * frequency * 2 * t) * 0.2 +
+                   np.sin(2 * np.pi * frequency * 3 * t) * 0.1)
+        else:  # Harmony
+            # Softer waveform for harmony
+            wave = (np.sin(2 * np.pi * frequency * t) * 0.4 +
+                   np.sin(2 * np.pi * frequency * 2 * t) * 0.1)
+        
+        # Apply envelope (ADSR - Attack, Decay, Sustain, Release)
+        envelope = np.ones_like(t)
+        
+        # Attack (5% of note)
+        attack_samples = max(1, int(0.05 * len(t)))
+        if attack_samples < len(envelope):
+            envelope[:attack_samples] = np.linspace(0, 1, attack_samples)
+        
+        # Release (20% of note)
+        release_samples = max(1, int(0.2 * len(t)))
+        if release_samples < len(envelope):
+            envelope[-release_samples:] = np.linspace(1, 0, release_samples)
+        
+        # Apply velocity
+        volume = (note.velocity / 127.0) * 0.3  # Scale down to prevent clipping
+        wave *= envelope * volume
+        
+        # Add to audio buffers (stereo)
+        if note.channel == 0:  # Melody - center
+            audio_left[start_sample:end_sample] += wave
+            audio_right[start_sample:end_sample] += wave
+        else:  # Harmony - slightly left and right for width
+            audio_left[start_sample:end_sample] += wave * 1.1
+            audio_right[start_sample:end_sample] += wave * 0.9
+    
+    # Normalize audio to prevent clipping
+    max_val = max(np.max(np.abs(audio_left)), np.max(np.abs(audio_right)))
+    if max_val > 0:
+        audio_left = audio_left / max_val * 0.8
+        audio_right = audio_right / max_val * 0.8
+    
+    # Convert to 16-bit PCM
+    audio_left_int = (audio_left * 32767).astype(np.int16)
+    audio_right_int = (audio_right * 32767).astype(np.int16)
+    
+    # Interleave stereo channels
+    stereo_audio = np.empty((audio_left_int.size + audio_right_int.size,), dtype=np.int16)
+    stereo_audio[0::2] = audio_left_int
+    stereo_audio[1::2] = audio_right_int
+    
+    # Create WAV file in memory
+    import io
+    wav_buffer = io.BytesIO()
+    
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(2)  # Stereo
+        wav_file.setsampwidth(2)  # 16-bit
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(stereo_audio.tobytes())
+    
+    return wav_buffer.getvalue()
+
+def create_audio_player_with_wav(wav_data: bytes) -> str:
+    """Create an audio player that uses the generated WAV file"""
+    import base64
+    
+    # Convert WAV data to base64 for embedding
+    wav_base64 = base64.b64encode(wav_data).decode()
+    
+    audio_html = f"""
+    <div style="
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 25px;
+        border-radius: 15px;
+        margin: 20px 0;
+        color: white;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    ">
+        <h3 style="margin-top: 0; color: white; text-align: center;">🎧 Play Your Melody</h3>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <audio controls style="width: 100%; max-width: 500px;">
+                <source src="data:audio/wav;base64,{wav_base64}" type="audio/wav">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+        
+        <div style="text-align: center; margin-top: 15px; font-size: 14px; opacity: 0.8;">
+            🎵 High-Quality WAV Audio • 🎶 Stereo Sound
+        </div>
+    </div>
+    """
+    
+    return audio_html
+
 def create_midi_file(melody_notes: List[Note], harmony_notes: List[Note] = None) -> bytes:
     """Create a MIDI file from the generated notes"""
     # Calculate number of tracks
@@ -811,16 +944,20 @@ def main():
                             total_duration = max(note.start_time + note.duration for note in melody_notes)
                             harmony_notes = harmony_gen.generate_harmony(total_duration)
                         
-                        # Create MIDI file
+                        # Create MIDI and WAV files
                         midi_data = create_midi_file(melody_notes, harmony_notes)
+                        wav_data = generate_wav_from_notes(melody_notes, harmony_notes)
                         
                         # Success message
                         st.success("✨ **Beautiful melody created!**")
                         
-                        # Web Audio Player
+                        # WAV Audio Player
                         st.subheader("🎧 Listen to Your Melody")
-                        audio_player_html = create_web_audio_player(melody_notes, harmony_notes)
-                        st.components.v1.html(audio_player_html, height=250)
+                        if wav_data:
+                            audio_player_html = create_audio_player_with_wav(wav_data)
+                            st.components.v1.html(audio_player_html, height=200)
+                        else:
+                            st.error("Could not generate audio. MIDI file is still available for download.")
                         
                         # Display information
                         info_col1, info_col2 = st.columns(2)
@@ -853,7 +990,7 @@ def main():
                         # Download section
                         st.subheader("📥 Download Your Melody")
                         
-                        download_col1, download_col2 = st.columns(2)
+                        download_col1, download_col2, download_col3 = st.columns(3)
                         
                         with download_col1:
                             filename = f"morse_melody_{message[:10].replace(' ', '_')}_{key.name}_{style.name}.mid"
@@ -867,6 +1004,20 @@ def main():
                             )
                         
                         with download_col2:
+                            if wav_data:
+                                wav_filename = f"morse_melody_{message[:10].replace(' ', '_')}_{key.name}_{style.name}.wav"
+                                st.download_button(
+                                    label="🎵 Download WAV Audio",
+                                    data=wav_data,
+                                    file_name=wav_filename,
+                                    mime="audio/wav",
+                                    use_container_width=True,
+                                    help="High-quality audio file!"
+                                )
+                            else:
+                                st.error("WAV generation failed")
+                        
+                        with download_col3:
                             # Info file
                             info_text = f"""Intelligent Morse Melody
 ========================
