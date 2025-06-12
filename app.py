@@ -913,6 +913,146 @@ def get_note_name_simple(midi_note):
     note = note_names[midi_note % 12]
     return f"{note}{octave}"
 
+def decode_midi_to_morse(midi_file_bytes) -> Tuple[str, str, float]:
+    """Decode a MIDI file back to morse code and text"""
+    try:
+        # Create temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as tmp_file:
+            tmp_file.write(midi_file_bytes)
+            tmp_file_path = tmp_file.name
+        
+        # Load MIDI file
+        mid = mido.MidiFile(tmp_file_path)
+        
+        # Extract notes from the melody track (track 0)
+        notes = []
+        current_time = 0
+        
+        for track in mid.tracks:
+            current_time = 0
+            note_events = []
+            
+            for msg in track:
+                current_time += msg.time
+                if msg.type == 'note_on' and msg.velocity > 0:
+                    note_events.append(('on', current_time, msg.note))
+                elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+                    note_events.append(('off', current_time, msg.note))
+            
+            # Process note events to get durations
+            active_notes = {}
+            for event_type, time, note in note_events:
+                if event_type == 'on':
+                    active_notes[note] = time
+                elif event_type == 'off' and note in active_notes:
+                    start_time = active_notes[note]
+                    duration = time - start_time
+                    notes.append((start_time, duration, note))
+                    del active_notes[note]
+            
+            # If we found notes, use this track
+            if notes:
+                break
+        
+        if not notes:
+            return "", "No notes found in MIDI file", 0.0
+        
+        # Sort notes by start time
+        notes.sort(key=lambda x: x[0])
+        
+        # Analyze timing to determine dots and dashes
+        durations = [duration for _, duration, _ in notes]
+        if len(durations) < 2:
+            return "", "Not enough notes to analyze", 0.0
+        
+        # Find threshold between dots and dashes
+        sorted_durations = sorted(durations)
+        threshold_index = len(sorted_durations) // 3
+        dot_threshold = sorted_durations[threshold_index] if threshold_index < len(sorted_durations) else sorted_durations[0]
+        
+        # Convert to morse symbols
+        morse_symbols = []
+        last_end_time = 0
+        
+        for start_time, duration, note in notes:
+            # Check for gaps (letter/word separators)
+            gap = start_time - last_end_time
+            
+            if gap > dot_threshold * 3:  # Word gap
+                if morse_symbols and morse_symbols[-1] != '/':
+                    morse_symbols.append('/')
+            elif gap > dot_threshold * 1.5:  # Letter gap
+                if morse_symbols and morse_symbols[-1] not in [' ', '/']:
+                    morse_symbols.append(' ')
+            
+            # Determine if dot or dash
+            if duration <= dot_threshold * 2:
+                morse_symbols.append('.')
+            else:
+                morse_symbols.append('-')
+            
+            last_end_time = start_time + duration
+        
+        # Convert morse symbols to display string
+        morse_display = ''.join(morse_symbols)
+        
+        # Convert morse to text
+        decoded_text = ""
+        current_letter = ""
+        
+        for symbol in morse_symbols:
+            if symbol == '.':
+                current_letter += '.'
+            elif symbol == '-':
+                current_letter += '-'
+            elif symbol == ' ':
+                if current_letter:
+                    # Find letter for this morse pattern
+                    for letter, pattern in MORSE_CODE.items():
+                        if pattern == current_letter:
+                            decoded_text += letter
+                            break
+                    else:
+                        decoded_text += '?'
+                    current_letter = ""
+            elif symbol == '/':
+                if current_letter:
+                    # Process last letter before word break
+                    for letter, pattern in MORSE_CODE.items():
+                        if pattern == current_letter:
+                            decoded_text += letter
+                            break
+                    else:
+                        decoded_text += '?'
+                    current_letter = ""
+                decoded_text += ' '
+        
+        # Process final letter
+        if current_letter:
+            for letter, pattern in MORSE_CODE.items():
+                if pattern == current_letter:
+                    decoded_text += letter
+                    break
+            else:
+                decoded_text += '?'
+        
+        # Calculate confidence score
+        total_chars = len([c for c in decoded_text if c != ' '])
+        unknown_chars = decoded_text.count('?')
+        confidence = ((total_chars - unknown_chars) / max(total_chars, 1)) * 100 if total_chars > 0 else 0
+        
+        # Clean up temp file
+        try:
+            os.unlink(tmp_file_path)
+        except:
+            pass
+        
+        return morse_display, decoded_text.strip(), confidence
+        
+    except Exception as e:
+        return "", f"Error decoding MIDI: {str(e)}", 0.0
+
 def generate_educational_analysis(melody_notes: List[Note], message: str, key_info: dict, style_info: dict) -> str:
     """Generate educational analysis of the melody for music students"""
     
