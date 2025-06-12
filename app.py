@@ -1,5 +1,4 @@
 import streamlit as st
-importimport streamlit as st
 import random
 import math
 import tempfile
@@ -12,10 +11,6 @@ import mido
 from typing import List, Tuple
 from dataclasses import dataclass
 from enum import Enum
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.patches import Ellipse
-import io
 
 # Set page config
 st.set_page_config(
@@ -738,176 +733,76 @@ def create_midi_file(melody_notes: List[Note], harmony_notes: List[Note] = None)
     midi.writeFile(midi_bytes)
     return midi_bytes.getvalue()
 
-def generate_musical_score(melody_notes: List[Note], harmony_notes: List[Note] = None, 
-                          message: str = "", key_info: dict = None) -> bytes:
-    """Generate a beautiful musical score showing the morse code melody"""
+def generate_simple_score_text(melody_notes: List[Note], message: str, key_info: dict) -> str:
+    """Generate a simple text-based musical score for educational purposes"""
     
-    # Create figure with high DPI for crisp printing
-    fig, (ax_melody, ax_harmony) = plt.subplots(2, 1, figsize=(16, 10), dpi=300)
-    fig.suptitle(f'🎵 Morse Code Melody: Secret Message Encoded', fontsize=20, fontweight='bold')
+    score_text = f"""
+🎼 MUSICAL SCORE: {message.upper()}
+{'=' * 50}
+
+🎹 Key: {key_info.get('name', 'C Major')}
+🎵 Secret Message: {message.upper()}
+
+📝 MORSE CODE TO MUSIC MAPPING:
+{'-' * 30}
+"""
     
-    # Staff parameters
-    staff_lines = [0, 1, 2, 3, 4]  # 5-line staff
-    line_spacing = 0.5
-    
-    def draw_staff(ax, title):
-        """Draw a musical staff"""
-        ax.set_xlim(0, 20)
-        ax.set_ylim(-2, 6)
-        
-        # Draw staff lines
-        for line in staff_lines:
-            ax.axhline(y=line, color='black', linewidth=1.2, alpha=0.8)
-        
-        # Draw treble clef (simplified)
-        ax.text(0.5, 2, '𝄞', fontsize=40, fontweight='bold', va='center')
-        
-        # Add title
-        ax.text(10, 5.5, title, fontsize=14, fontweight='bold', ha='center')
-        
-        # Remove axes
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-    
-    def midi_to_staff_position(midi_note):
-        """Convert MIDI note to staff position (C4=60 is line 0)"""
-        # C4 (MIDI 60) = line 0, each semitone is 0.25 units
-        return (midi_note - 60) * 0.25
-    
-    def get_note_name(midi_note):
-        """Get note name from MIDI number"""
-        note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        octave = (midi_note // 12) - 1
-        note = note_names[midi_note % 12]
-        return f"{note}{octave}"
-    
-    def draw_note(ax, x_pos, midi_note, duration, is_dot=False, morse_char=''):
-        """Draw a musical note with morse code annotation"""
-        y_pos = midi_to_staff_position(midi_note)
-        
-        # Choose note symbol based on duration
-        if duration <= 0.3:  # Dot - eighth note
-            note_symbol = '♪'
-            color = '#FF6B6B'  # Red for dots
-        else:  # Dash - quarter note  
-            note_symbol = '♩'
-            color = '#4ECDC4'  # Blue for dashes
-        
-        # Draw the note
-        ax.text(x_pos, y_pos, note_symbol, fontsize=24, ha='center', va='center', 
-                color=color, fontweight='bold')
-        
-        # Add ledger lines if needed
-        if y_pos > 4.5 or y_pos < -0.5:
-            ledger_y = round(y_pos * 2) / 2  # Round to nearest half-line
-            if ledger_y > 4.5:
-                for line_y in np.arange(5, ledger_y + 0.5, 0.5):
-                    ax.plot([x_pos - 0.3, x_pos + 0.3], [line_y, line_y], 'k-', linewidth=1)
-            elif ledger_y < -0.5:
-                for line_y in np.arange(-0.5, ledger_y - 0.5, -0.5):
-                    ax.plot([x_pos - 0.3, x_pos + 0.3], [line_y, line_y], 'k-', linewidth=1)
-        
-        # Add morse code annotation
-        if morse_char:
-            ax.text(x_pos, y_pos + 1.5, morse_char, fontsize=16, ha='center', 
-                   fontweight='bold', color=color)
-        
-        # Add note name below staff
-        note_name = get_note_name(midi_note)
-        ax.text(x_pos, -1.5, note_name, fontsize=10, ha='center', color='gray')
-    
-    # Draw melody staff
-    draw_staff(ax_melody, f'🎹 Melody Line - Key: {key_info.get("name", "C Major") if key_info else "C Major"}')
-    
-    # Plot melody notes
-    x_position = 2  # Start after clef
-    morse_sequence = []
-    
-    # Convert message to morse for annotation
+    # Add morse code breakdown
     for char in message.upper():
-        if char in MORSE_CODE:
-            morse_sequence.extend(list(MORSE_CODE[char]))
-            morse_sequence.append(' ')
-        elif char == ' ':
-            morse_sequence.append('/')
+        if char in MORSE_CODE and char != ' ':
+            morse_pattern = MORSE_CODE[char]
+            score_text += f"Letter '{char}': {morse_pattern}\n"
     
-    morse_index = 0
-    for note in melody_notes[:20]:  # Limit to first 20 notes for readability
-        if morse_index < len(morse_sequence):
-            morse_char = morse_sequence[morse_index]
-            if morse_char in '.-':
-                is_dot = morse_char == '.'
-                draw_note(ax_melody, x_position, note.pitch, note.duration, is_dot, morse_char)
-                x_position += 0.8
-                morse_index += 1
-            else:
-                morse_index += 1  # Skip spaces
-        else:
-            draw_note(ax_melody, x_position, note.pitch, note.duration)
-            x_position += 0.8
+    score_text += f"""
+🎼 MUSICAL NOTATION GUIDE:
+{'-' * 25}
+• Short notes (♪) = DOTS (.)
+• Long notes (♩) = DASHES (-)
+• Rests = Letter/word gaps
+
+📊 MELODY ANALYSIS:
+{'-' * 18}
+• Total Notes: {len(melody_notes)}
+• Highest Note: MIDI {max(note.pitch for note in melody_notes)}
+• Lowest Note: MIDI {min(note.pitch for note in melody_notes)}
+• Note Range: {max(note.pitch for note in melody_notes) - min(note.pitch for note in melody_notes)} semitones
+
+🎵 NOTE SEQUENCE:
+{'-' * 16}
+"""
     
-    # Draw harmony staff if harmony exists
-    if harmony_notes:
-        draw_staff(ax_harmony, '🎶 Harmony & Chords')
-        
-        # Group harmony notes by time (chords)
-        harmony_by_time = {}
-        for note in harmony_notes[:15]:  # Limit harmony notes
-            time_key = round(note.start_time, 1)
-            if time_key not in harmony_by_time:
-                harmony_by_time[time_key] = []
-            harmony_by_time[time_key].append(note)
-        
-        # Draw chord symbols
-        x_pos = 2
-        for time_key in sorted(harmony_by_time.keys()):
-            chord_notes = harmony_by_time[time_key]
-            
-            # Draw chord notes vertically aligned
-            for i, note in enumerate(chord_notes):
-                y_pos = midi_to_staff_position(note.pitch)
-                ax_harmony.text(x_pos, y_pos, '♩', fontsize=20, ha='center', va='center', 
-                              color='#9B59B6', alpha=0.8)
-            
-            # Add chord symbol above
-            if chord_notes:
-                root_note = min(chord_notes, key=lambda n: n.pitch)
-                chord_name = get_note_name(root_note.pitch).replace('#', '♯')
-                ax_harmony.text(x_pos, 5, chord_name, fontsize=12, ha='center', 
-                              fontweight='bold', color='#9B59B6')
-            
-            x_pos += 2
-    else:
-        # No harmony - show educational info instead
-        ax_harmony.text(10, 2, '🎓 Educational Notes:\n\n' +
-                       '🔴 Red ♪ = Dots (.)\n' +
-                       '🔵 Blue ♩ = Dashes (-)\n\n' +
-                       'Each letter creates a unique melodic pattern!\n' +
-                       'Try different musical keys for the same message.',
-                       fontsize=12, ha='center', va='center',
-                       bbox=dict(boxstyle="round,pad=0.5", facecolor="lightyellow", alpha=0.8))
-        ax_harmony.set_xlim(0, 20)
-        ax_harmony.set_ylim(0, 4)
-        ax_harmony.axis('off')
+    # Add simplified note representation
+    for i, note in enumerate(melody_notes[:20]):  # First 20 notes
+        duration_symbol = "♪" if note.duration <= 0.3 else "♩"
+        note_name = get_note_name_simple(note.pitch)
+        score_text += f"{i+1:2d}. {duration_symbol} {note_name} (MIDI {note.pitch})\n"
     
-    # Add educational information
-    fig.text(0.02, 0.02, 
-             f'🎵 Morse Code: {" ".join(MORSE_CODE.get(c.upper(), "") for c in message if c.upper() in MORSE_CODE)}\n' +
-             f'🎼 Generated by Intelligent Morse Melody Studio - Perfect for Music Education!',
-             fontsize=10, style='italic', alpha=0.7)
+    if len(melody_notes) > 20:
+        score_text += f"... and {len(melody_notes) - 20} more notes\n"
     
-    # Save to bytes
-    img_buffer = io.BytesIO()
-    plt.tight_layout()
-    plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight', 
-                facecolor='white', edgecolor='none')
-    plt.close()
+    score_text += """
+🎓 EDUCATIONAL NOTES:
+==================
+This melody encodes your secret message using Morse code timing!
+Each letter becomes a unique musical phrase.
+
+🔍 ANALYSIS QUESTIONS:
+- Which letters create interesting rhythms?
+- How do dots vs dashes affect the melody?
+- What happens when you change the musical key?
+
+Generated by Intelligent Morse Melody Studio
+Perfect for Music Education!
+"""
     
-    return img_buffer.getvalue()
+    return score_text
+
+def get_note_name_simple(midi_note):
+    """Simple note name with octave"""
+    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    octave = (midi_note // 12) - 1
+    note = note_names[midi_note % 12]
+    return f"{note}{octave}"
 
 def generate_educational_analysis(melody_notes: List[Note], message: str, key_info: dict, style_info: dict) -> str:
     """Generate educational analysis of the melody for music students"""
@@ -984,13 +879,6 @@ Perfect for Music Education & Secret Communication!
 """
     
     return analysis
-
-def get_note_name_simple(midi_note):
-    """Simple note name without octave"""
-    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    octave = (midi_note // 12) - 1
-    note = note_names[midi_note % 12]
-    return f"{note}{octave}"
     """Decode a MIDI file back to morse code and text"""
     try:
         # Create temporary file
@@ -1212,10 +1100,10 @@ def main():
                             total_duration = max(note.start_time + note.duration for note in melody_notes)
                             harmony_notes = harmony_gen.generate_harmony(total_duration)
                         
-                        # Create MIDI, WAV, and Score files
+                        # Create MIDI, WAV, and educational materials
                         midi_data = create_midi_file(melody_notes, harmony_notes)
                         wav_data = generate_wav_from_notes(melody_notes, harmony_notes)
-                        score_data = generate_musical_score(melody_notes, harmony_notes, message, key.value)
+                        score_text = generate_simple_score_text(melody_notes, message, key.value)
                         analysis_text = generate_educational_analysis(melody_notes, message, key.value, style.value)
                         
                         # Success message
@@ -1292,17 +1180,14 @@ def main():
                                 st.error("WAV generation failed")
                         
                         with download_col3:
-                            if score_data:
-                                st.download_button(
-                                    label="🎼 Musical Score",
-                                    data=score_data,
-                                    file_name=f"score_{song_id}.png",
-                                    mime="image/png",
-                                    use_container_width=True,
-                                    help="Visual sheet music!"
-                                )
-                            else:
-                                st.error("Score generation failed")
+                            st.download_button(
+                                label="🎼 Musical Score",
+                                data=score_text,
+                                file_name=f"score_{song_id}.txt",
+                                mime="text/plain",
+                                use_container_width=True,
+                                help="Text-based music notation!"
+                            )
                         
                         with download_col4:
                             st.download_button(
@@ -1311,17 +1196,13 @@ def main():
                                 file_name=f"analysis_{song_id}.txt",
                                 mime="text/plain",
                                 use_container_width=True,
-                                help="Learning guide!"
+                                help="Complete learning guide!"
                             )
                         
-                        # Show score preview
-                        if score_data:
-                            st.subheader("🎼 Musical Score Preview")
-                            st.image(score_data, caption="Your secret message as musical notation!", use_container_width=True)
-                            
                         # Educational insights
                         st.subheader("🎓 Educational Insights")
-                        with st.expander("📚 See Learning Analysis"):
+                        with st.expander("📚 See Musical Score & Analysis"):
+                            st.text(score_text)
                             st.text(analysis_text)
                         
                         # Tips for next generation
