@@ -18,14 +18,23 @@ MORSE_CODE_DICT = {
     '0': '-----', ' ': '/'
 }
 
-# Enhanced musical scales
+# IMPROVED: More musical scales with authentic intervals
 SCALES = {
     'major': [0, 2, 4, 5, 7, 9, 11],
     'minor': [0, 2, 3, 5, 7, 8, 10],
     'pentatonic': [0, 2, 4, 7, 9],
     'blues': [0, 3, 5, 6, 7, 10],
     'dorian': [0, 2, 3, 5, 7, 9, 10],
-    'mixolydian': [0, 2, 4, 5, 7, 9, 10]
+    'mixolydian': [0, 2, 4, 5, 7, 9, 10],
+    'lydian': [0, 2, 4, 6, 7, 9, 11],
+    'phrygian': [0, 1, 3, 5, 7, 8, 10],
+    'harmonic_minor': [0, 2, 3, 5, 7, 8, 11],
+    'melodic_minor': [0, 2, 3, 5, 7, 9, 11],
+    'whole_tone': [0, 2, 4, 6, 8, 10],
+    'diminished': [0, 2, 3, 5, 6, 8, 9, 11],
+    'japanese': [0, 1, 5, 7, 8],
+    'arabic': [0, 1, 4, 5, 7, 8, 11],
+    'gypsy': [0, 2, 3, 6, 7, 8, 11]
 }
 
 # Enhanced chord progressions
@@ -35,7 +44,10 @@ CHORD_PROGRESSIONS = {
     'folk': [0, 4, 0, 4],        # I-V-I-V
     'minor': [0, 6, 3, 4],       # i-VII-IV-V
     'jazz': [0, 5, 1, 4],        # I-vi-ii-V
-    'blues': [0, 0, 4, 0, 5, 4, 0, 5]  # 12-bar blues pattern
+    'blues': [0, 0, 4, 0, 5, 4, 0, 5],  # 12-bar blues pattern
+    'modal': [0, 2, 4, 0],       # I-iii-V-I
+    'descending': [0, 10, 8, 6], # I-♭VII-♭VI-♭V
+    'circle': [0, 4, 1, 5]       # I-V-ii-vi
 }
 
 # Musical styles with AI parameters
@@ -70,9 +82,16 @@ def text_to_morse(text):
     return ' '.join(MORSE_CODE_DICT.get(c.upper(), '') for c in text)
 
 def get_scale_notes(root_pitch, scale_type):
-    """Generate notes for a given scale"""
+    """Generate notes for a given scale across multiple octaves"""
     scale_intervals = SCALES[scale_type]
-    return [root_pitch + interval for interval in scale_intervals]
+    notes = []
+    # Generate 3 octaves of the scale
+    for octave in range(3):
+        for interval in scale_intervals:
+            note = root_pitch + (octave * 12) + interval - 12  # Start one octave below
+            if 36 <= note <= 96:  # Keep within MIDI range
+                notes.append(note)
+    return sorted(notes)
 
 def get_chord_notes(root_pitch, chord_type='major'):
     """Generate chord notes with more variety"""
@@ -91,391 +110,246 @@ def get_chord_notes(root_pitch, chord_type='major'):
     else:
         return [root_pitch, root_pitch + 4, root_pitch + 7]
 
-class MelodicAI:
-    """Enhanced AI that creates real melodies following musical conventions"""
+class ImprovedMelodyGenerator:
+    """VASTLY IMPROVED melody generator that creates beautiful, musical melodies"""
     
-    def __init__(self, key_root, scale_type, style='ballad'):
+    def __init__(self, key_root, scale_type='major'):
         self.key_root = key_root
         self.scale_type = scale_type
-        self.style = style
         self.scale_notes = get_scale_notes(key_root, scale_type)
-        self.extended_scale = self.create_extended_scale()
         
-        # Musical memory for context
-        self.melody_history = deque(maxlen=8)
-        self.phrase_direction = 0  # -1 descending, 0 neutral, 1 ascending
-        self.phrase_climax_reached = False
-        self.current_phrase_length = 0
+        # Musical memory and context
+        self.last_notes = deque(maxlen=6)  # Remember last 6 notes
+        self.phrase_direction = 0  # -1 down, 0 neutral, 1 up
+        self.phrase_position = 0
+        self.phrase_peak_reached = False
         
-        # Melodic patterns and tendencies
-        self.melodic_patterns = self.create_melodic_patterns()
-        self.interval_weights = self.create_interval_weights()
+        # Musical intelligence parameters
+        self.preferred_intervals = self._get_interval_preferences()
+        self.tendency_notes = self._get_tendency_notes()
         
-    def create_extended_scale(self):
-        """Create an extended scale covering multiple octaves for better melodic range"""
-        extended = []
-        # Add notes from one octave below to one octave above
-        for octave_offset in [-12, 0, 12]:
-            for note in self.scale_notes:
-                extended.append(note + octave_offset)
-        return sorted(extended)
-    
-    def create_melodic_patterns(self):
-        """Define melodic patterns based on musical style"""
-        patterns = {
-            'ballad': {
-                'phrase_arch': 'rise_fall',  # Start low, rise to climax, fall
-                'step_preference': 0.7,     # 70% stepwise motion
-                'leap_max': 5,              # Max interval of 5 semitones
-                'climax_position': 0.7,     # Climax 70% through phrase
-                'tendency_tones': True      # Use leading tones and resolution
-            },
-            'folk': {
-                'phrase_arch': 'wave',      # Gentle up and down motion
-                'step_preference': 0.8,     # 80% stepwise motion
-                'leap_max': 4,              # Smaller intervals
-                'climax_position': 0.6,
-                'tendency_tones': True
-            },
-            'jazz': {
-                'phrase_arch': 'complex',   # More varied contour
-                'step_preference': 0.5,     # More leaps allowed
-                'leap_max': 7,              # Larger intervals allowed
-                'climax_position': 0.6,
-                'tendency_tones': True
-            },
-            'ambient': {
-                'phrase_arch': 'floating', # Minimal direction
-                'step_preference': 0.9,    # Very smooth
-                'leap_max': 3,             # Very small intervals
-                'climax_position': 0.5,
-                'tendency_tones': False    # Less resolution needed
-            }
-        }
-        return patterns.get(self.style, patterns['ballad'])
-    
-    def create_interval_weights(self):
-        """Create weighted probabilities for different intervals"""
-        if self.style == 'ballad':
-            # Prefer steps, some small leaps
+    def _get_interval_preferences(self):
+        """Define preferred intervals for melodic movement"""
+        if self.scale_type in ['major', 'minor']:
+            # Classical preferences: steps and thirds favored
             return {
-                0: 0.05,   # Unison (rare)
                 1: 0.25,   # Half step
-                2: 0.25,   # Whole step  
+                2: 0.30,   # Whole step (most common)
                 3: 0.15,   # Minor third
-                4: 0.10,   # Major third
-                5: 0.08,   # Fourth
-                7: 0.07,   # Fifth
-                8: 0.03,   # Minor sixth
-                9: 0.02    # Major sixth
+                4: 0.12,   # Major third
+                5: 0.08,   # Perfect fourth
+                7: 0.06,   # Perfect fifth
+                12: 0.04   # Octave
             }
-        elif self.style == 'folk':
-            # Very stepwise, traditional
+        elif self.scale_type == 'pentatonic':
+            # Pentatonic prefers larger, more open intervals
             return {
-                0: 0.03,
-                1: 0.15,
-                2: 0.35,   # Lots of whole steps
-                3: 0.20,
-                4: 0.15,
-                5: 0.07,
-                7: 0.05
+                2: 0.25,   # Whole step
+                3: 0.20,   # Minor third
+                4: 0.20,   # Major third
+                5: 0.15,   # Perfect fourth
+                7: 0.15,   # Perfect fifth
+                9: 0.05    # Major sixth
             }
-        elif self.style == 'jazz':
-            # More adventurous intervals
+        elif self.scale_type == 'blues':
+            # Blues loves bends and blue notes
             return {
-                0: 0.02,
-                1: 0.15,
-                2: 0.20,
-                3: 0.15,
-                4: 0.15,
-                5: 0.10,
-                7: 0.10,
-                8: 0.05,
-                9: 0.05,
-                11: 0.03   # Major seventh
+                1: 0.15,   # Half step (blue notes)
+                2: 0.25,   # Whole step
+                3: 0.20,   # Minor third (blue note)
+                4: 0.15,   # Major third
+                5: 0.10,   # Perfect fourth
+                7: 0.10,   # Perfect fifth
+                10: 0.05   # Minor seventh
             }
-        else:  # ambient
-            # Very smooth, minimal movement
+        else:
+            # Default to balanced intervals
             return {
-                0: 0.10,   # Some repeated notes
-                1: 0.40,   # Lots of half steps
-                2: 0.30,
-                3: 0.15,
-                4: 0.05
+                1: 0.20, 2: 0.25, 3: 0.15, 4: 0.15, 
+                5: 0.10, 7: 0.10, 12: 0.05
             }
     
-    def get_phrase_target(self, phrase_length):
-        """Determine where the phrase should go based on musical structure"""
-        pattern = self.melodic_patterns
-        climax_pos = pattern['climax_position']
-        arch_type = pattern['phrase_arch']
-        
-        if arch_type == 'rise_fall':
-            if phrase_length < climax_pos:
-                return 'rise'
-            else:
-                return 'fall'
-        elif arch_type == 'wave':
-            # Gentle wave motion
-            wave_pos = (phrase_length * 2 * math.pi) % (2 * math.pi)
-            if math.sin(wave_pos) > 0:
-                return 'rise'
-            else:
-                return 'fall'
-        elif arch_type == 'floating':
-            return 'neutral'
-        else:  # complex
-            # More unpredictable motion
-            if random.random() < 0.4:
-                return 'rise'
-            elif random.random() < 0.8:
-                return 'fall'
-            else:
-                return 'neutral'
+    def _get_tendency_notes(self):
+        """Define notes that have strong tendencies to resolve"""
+        # Scale degree tendencies (relative to key_root)
+        return {
+            11: 0,   # Leading tone resolves to tonic
+            6: 7,    # 6th degree often moves to 7th
+            4: 3,    # 4th degree often resolves down to 3rd
+            1: 0,    # 2nd degree resolves to tonic
+        }
     
-    def choose_melodic_interval(self, current_note, target_direction):
-        """Choose the next interval based on musical logic"""
-        intervals = list(self.interval_weights.keys())
-        weights = list(self.interval_weights.values())
+    def _calculate_phrase_arc(self, position_in_phrase, total_length):
+        """Calculate where melody should go based on phrase structure"""
+        if total_length <= 1:
+            return 0
+            
+        # Create natural phrase arc: start mid, rise to peak, then fall
+        progress = position_in_phrase / max(total_length - 1, 1)
         
-        # Adjust weights based on target direction
-        if target_direction == 'rise':
-            # Boost upward intervals
+        if progress < 0.3:
+            return 0.3  # Gentle rise
+        elif progress < 0.7:
+            return 0.8  # Approach peak
+        else:
+            return -0.5  # Fall to resolution
+    
+    def _get_melodic_context(self):
+        """Analyze recent melodic context for better decisions"""
+        if len(self.last_notes) < 2:
+            return {'direction': 0, 'range_used': 12, 'last_interval': 0}
+        
+        # Calculate recent direction
+        recent_direction = 0
+        for i in range(1, min(4, len(self.last_notes))):
+            if self.last_notes[-i] > self.last_notes[-i-1]:
+                recent_direction += 1
+            elif self.last_notes[-i] < self.last_notes[-i-1]:
+                recent_direction -= 1
+        
+        # Calculate range used
+        notes_range = max(self.last_notes) - min(self.last_notes)
+        
+        # Last interval
+        last_interval = abs(self.last_notes[-1] - self.last_notes[-2]) if len(self.last_notes) >= 2 else 0
+        
+        return {
+            'direction': recent_direction,
+            'range_used': notes_range,
+            'last_interval': last_interval
+        }
+    
+    def _choose_interval_direction(self, target_direction, context):
+        """Intelligently choose interval direction"""
+        # Avoid monotonous motion
+        if abs(context['direction']) >= 3:
+            # Force change of direction
+            return -1 if context['direction'] > 0 else 1
+        
+        # Large interval should be followed by step in opposite direction
+        if context['last_interval'] >= 5:
+            last_direction = 1 if self.last_notes[-1] > self.last_notes[-2] else -1
+            return -last_direction
+        
+        # Follow target direction with some variation
+        if target_direction > 0.5:
+            return 1 if random.random() < 0.8 else -1
+        elif target_direction < -0.3:
+            return -1 if random.random() < 0.8 else 1
+        else:
+            return random.choice([-1, 1])
+    
+    def _apply_interval_with_direction(self, current_note, interval, direction):
+        """Apply interval in the specified direction"""
+        candidate = current_note + (interval * direction)
+        
+        # Keep within reasonable range
+        if candidate < min(self.scale_notes):
+            candidate = current_note + interval  # Force upward
+        elif candidate > max(self.scale_notes):
+            candidate = current_note - interval  # Force downward
+        
+        # Snap to nearest scale note
+        return min(self.scale_notes, key=lambda x: abs(x - candidate))
+    
+    def _apply_tendency_resolution(self, note):
+        """Apply music theory tendency resolutions"""
+        scale_degree = (note - self.key_root) % 12
+        
+        if scale_degree in self.tendency_notes and random.random() < 0.4:
+            target_degree = self.tendency_notes[scale_degree]
+            octave = (note - self.key_root) // 12
+            return self.key_root + target_degree + (octave * 12)
+        
+        return note
+    
+    def generate_melodic_note(self, morse_symbol, phrase_position, phrase_length):
+        """Generate a musically intelligent note"""
+        # First note: start in comfortable mid-range
+        if not self.last_notes:
+            comfortable_notes = [n for n in self.scale_notes 
+                               if self.key_root <= n <= self.key_root + 12]
+            if morse_symbol == '.':
+                return random.choice(comfortable_notes[:len(comfortable_notes)//2])
+            else:  # dash
+                return random.choice(comfortable_notes[len(comfortable_notes)//2:])
+        
+        current_note = self.last_notes[-1]
+        context = self._get_melodic_context()
+        
+        # Calculate phrase arc target
+        arc_target = self._calculate_phrase_arc(phrase_position, phrase_length)
+        
+        # Choose interval direction
+        direction = self._choose_interval_direction(arc_target, context)
+        
+        # Choose interval size based on preferences and symbol
+        intervals = list(self.preferred_intervals.keys())
+        weights = list(self.preferred_intervals.values())
+        
+        # Modify weights based on morse symbol
+        if morse_symbol == '.':
+            # Dots prefer smaller intervals
             for i, interval in enumerate(intervals):
-                if interval > 0:
+                if interval <= 3:
                     weights[i] *= 1.5
-        elif target_direction == 'fall':
-            # Boost downward intervals by making them negative
+        else:  # dash
+            # Dashes prefer slightly larger intervals
             for i, interval in enumerate(intervals):
-                if interval > 0:
-                    intervals[i] = -interval
+                if interval >= 3:
+                    weights[i] *= 1.3
         
         # Choose interval
         chosen_interval = random.choices(intervals, weights=weights)[0]
         
-        # Apply direction
-        if target_direction == 'fall' and chosen_interval > 0:
-            chosen_interval = -chosen_interval
-        elif target_direction == 'rise' and chosen_interval < 0:
-            chosen_interval = -chosen_interval
+        # Apply interval with direction
+        candidate_note = self._apply_interval_with_direction(current_note, chosen_interval, direction)
         
-        return chosen_interval
-    
-    def apply_tendency_tones(self, note, next_note):
-        """Apply music theory tendency tones for better resolution"""
-        if not self.melodic_patterns['tendency_tones']:
-            return next_note
+        # Apply tendency resolution
+        final_note = self._apply_tendency_resolution(candidate_note)
         
-        # Leading tone resolution (7th degree resolves up to tonic)
-        note_degree = (note - self.key_root) % 12
-        next_degree = (next_note - self.key_root) % 12
-        
-        # If we're on the leading tone (7th degree), prefer resolution to tonic
-        if note_degree == 11 and random.random() < 0.6:  # 60% chance
-            return self.key_root + (next_note // 12) * 12  # Resolve to tonic in same octave
-        
-        # If we're on the 4th degree, prefer resolution down to 3rd
-        if note_degree == 5 and random.random() < 0.4:  # 40% chance
-            target_degree = 4  # 3rd degree
-            return self.key_root + target_degree + (next_note // 12) * 12
-        
-        return next_note
-    
-    def ensure_scale_membership(self, note):
-        """Ensure the note belongs to our scale, with occasional chromatic passing tones"""
-        # Find closest scale note
-        closest_scale_note = min(self.extended_scale, key=lambda x: abs(x - note))
-        
-        # 90% of the time, use scale notes
+        # Ensure it's in scale (90% of the time)
         if random.random() < 0.9:
-            return closest_scale_note
-        else:
-            # 10% of the time, allow chromatic passing tones
-            return note
+            final_note = min(self.scale_notes, key=lambda x: abs(x - final_note))
+        
+        # Remember this note
+        self.last_notes.append(final_note)
+        
+        return final_note
     
-    def choose_melodic_note(self, symbol, position_in_phrase, **kwargs):
-        """Enhanced melodic note selection following musical conventions"""
-        self.current_phrase_length = position_in_phrase
-        
-        # Determine phrase target direction
-        phrase_progress = position_in_phrase / 8.0  # Assume 8-note phrases
-        target_direction = self.get_phrase_target(phrase_progress)
-        
-        if not self.melody_history:
-            # Start with a good opening note (usually tonic or nearby)
-            opening_notes = [self.key_root, self.key_root + 2, self.key_root + 4]
-            if symbol == '.':
-                note = random.choice(opening_notes[:2])  # Lower for dots
-            else:
-                note = random.choice(opening_notes[1:])  # Higher for dashes
-        else:
-            current_note = self.melody_history[-1]
-            
-            # Choose interval based on musical logic
-            interval = self.choose_melodic_interval(current_note, target_direction)
-            
-            # Apply interval
-            candidate_note = current_note + interval
-            
-            # Apply tendency tone resolution
-            candidate_note = self.apply_tendency_tones(current_note, candidate_note)
-            
-            # Ensure it's in our scale (mostly)
-            note = self.ensure_scale_membership(candidate_note)
-            
-            # Keep in reasonable range
-            note = max(self.key_root - 12, min(note, self.key_root + 19))
-        
-        # Adjust for dot vs dash character
-        if symbol == '.' and len(self.melody_history) > 0:
-            # Dots tend to be lower/shorter
-            if random.random() < 0.3:  # 30% chance to go lower
-                note = max(note - 2, self.key_root - 12)
-        elif symbol == '-' and len(self.melody_history) > 0:
-            # Dashes tend to be higher/longer
-            if random.random() < 0.3:  # 30% chance to go higher
-                note = min(note + 2, self.key_root + 19)
-        
-        self.melody_history.append(note)
-        return note
-    
-    def create_phrase_ending(self, phrase_length):
+    def create_phrase_ending(self):
         """Create a satisfying phrase ending"""
-        if len(self.melody_history) < 2:
+        if not self.last_notes:
             return self.key_root
         
-        current_note = self.melody_history[-1]
+        current_note = self.last_notes[-1]
         
-        # Strong tendency to end phrases on stable tones (1, 3, 5 of scale)
-        stable_endings = [
-            self.key_root,      # Tonic
-            self.key_root + 4,  # Third  
-            self.key_root + 7   # Fifth
+        # Strong preference for ending on stable tones
+        stable_notes = [
+            self.key_root,           # Tonic
+            self.key_root + 4,       # Third
+            self.key_root + 7,       # Fifth
         ]
         
-        # Choose closest stable ending
-        target_ending = min(stable_endings, key=lambda x: abs(x - current_note))
+        # Find closest stable note
+        target = min(stable_notes, key=lambda x: abs(x - current_note))
         
-        # Move toward it step-wise if possible
-        if abs(current_note - target_ending) <= 2:
-            return target_ending
+        # Move stepwise toward target if possible
+        if abs(current_note - target) <= 2:
+            self.last_notes.append(target)
+            return target
         else:
-            # Move one step toward the target
-            direction = 1 if target_ending > current_note else -1
-            return current_note + direction
-    
-    def generate_smart_harmony(self, melody_note, time, phrase_position, **kwargs):
-        """Generate harmony that intelligently follows the melody"""
-        ai_harmony = kwargs.get('ai_harmony', True)
-        
-        if not ai_harmony:
-            return get_chord_notes(self.key_root, 'major' if self.scale_type == 'major' else 'minor')
-        
-        # Analyze melody note in context of scale
-        melody_scale_degree = (melody_note - self.key_root) % 12
-        
-        # Smart chord selection based on scale degree
-        if self.scale_type == 'major':
-            chord_map = {
-                0: ('major', 0),    # Tonic
-                2: ('minor', 2),    # Supertonic
-                4: ('minor', 4),    # Mediant
-                5: ('major', 5),    # Subdominant
-                7: ('major', 7),    # Dominant
-                9: ('minor', 9),    # Submediant
-                11: ('dim', 11)     # Leading tone
-            }
-        else:  # minor scale
-            chord_map = {
-                0: ('minor', 0),    # Tonic
-                2: ('dim', 2),      # Supertonic
-                3: ('major', 3),    # Mediant
-                5: ('minor', 5),    # Subdominant
-                7: ('minor', 7),    # Dominant
-                8: ('major', 8),    # Submediant
-                10: ('major', 10)   # Subtonic
-            }
-        
-        # Find best fitting chord
-        best_chord = None
-        for scale_degree, (chord_type, root_offset) in chord_map.items():
-            if melody_scale_degree in [scale_degree, (scale_degree + 2) % 12, (scale_degree + 4) % 12]:
-                chord_root = self.key_root + root_offset
-                best_chord = get_chord_notes(chord_root, chord_type)
-                break
-        
-        if not best_chord:
-            best_chord = get_chord_notes(self.key_root, 'major' if self.scale_type == 'major' else 'minor')
-        
-        # Add jazz extensions for jazz style
-        if self.style == 'jazz' and random.random() < 0.4:
-            extension = random.choice([9, 11, 13])
-            if len(best_chord) < 4:
-                best_chord.append(best_chord[0] + extension)
-        
-        return best_chord
-    
-    def generate_walking_bass(self, current_chord, next_chord, duration, **kwargs):
-        """Generate intelligent walking bass lines"""
-        walking_bass = kwargs.get('walking_bass', True)
-        
-        if not walking_bass:
-            bass_root = min(current_chord) - 12
-            return [(bass_root, duration)]
-        
-        bass_notes = []
-        current_root = min(current_chord) - 12
-        
-        if next_chord:
-            next_root = min(next_chord) - 12
-            steps = 4
-            step_duration = duration / steps
-            
-            for i in range(steps):
-                if i == 0:
-                    bass_notes.append((current_root, step_duration))
-                elif i == steps - 1:
-                    approach_note = next_root - 1 if next_root > current_root else next_root + 1
-                    bass_notes.append((approach_note, step_duration))
-                else:
-                    if i == 1:
-                        bass_notes.append((current_root + 7, step_duration))
-                    else:
-                        if abs(next_root - current_root) > 2:
-                            direction = 1 if next_root > current_root else -1
-                            approach = current_root + direction * (i - 1)
-                        else:
-                            chord_tone = random.choice([current_root + 3, current_root + 5])
-                        bass_notes.append((approach if abs(next_root - current_root) > 2 else chord_tone, step_duration))
-        else:
-            pattern = [current_root, current_root + 7, current_root + 5, current_root + 7]
-            step_duration = duration / len(pattern)
-            for note in pattern:
-                bass_notes.append((note, step_duration))
-        
-        return bass_notes
-    
-    def apply_humanization(self, time, duration, velocity, **kwargs):
-        """Apply human-like timing and dynamics variations"""
-        humanize = kwargs.get('humanize', True)
-        
-        if not humanize:
-            return time, duration, velocity
-        
-        timing_variance = random.uniform(-0.02, 0.02)
-        humanized_time = max(0, time + timing_variance)
-        
-        duration_variance = random.uniform(0.95, 1.05)
-        humanized_duration = duration * duration_variance
-        
-        velocity_variance = random.randint(-10, 10)
-        humanized_velocity = max(1, min(127, velocity + velocity_variance))
-        
-        return humanized_time, humanized_duration, humanized_velocity
+            # Take one step toward target
+            step = 2 if target > current_note else -2
+            intermediate = current_note + step
+            # Snap to scale
+            intermediate = min(self.scale_notes, key=lambda x: abs(x - intermediate))
+            self.last_notes.append(intermediate)
+            return intermediate
 
 def morse_to_enhanced_midi(morse_code, output_file, **kwargs):
     """
-    Enhanced MIDI generator with multiple musical features (original version)
+    Enhanced MIDI generator with VASTLY IMPROVED melody generation
     """
     # Extract parameters with defaults
     tempo = kwargs.get('tempo', 120)
@@ -491,6 +365,9 @@ def morse_to_enhanced_midi(morse_code, output_file, **kwargs):
     
     duration_unit = 0.25  # base duration for a dot
     time = 0
+    
+    # Initialize IMPROVED melody generator
+    melody_ai = ImprovedMelodyGenerator(key_root, scale_type)
     
     # Create MIDI file with multiple tracks
     num_tracks = 1
@@ -519,246 +396,94 @@ def morse_to_enhanced_midi(morse_code, output_file, **kwargs):
     if add_drums:
         midi.addProgramChange(drum_track, 9, 0, 0)  # Standard drum kit
     
-    # Get scale notes for melody
-    scale_notes = get_scale_notes(key_root, scale_type)
-    
-    # Get chord progression
-    progression = CHORD_PROGRESSIONS[chord_progression]
-    chord_duration = duration_unit * 8  # Each chord lasts 8 beats
-    current_chord_index = 0
-    chord_change_time = chord_duration
-    
-    # Generate melody (encoded message)
+    # IMPROVED MELODY GENERATION
     volume = 100
     harmony_volume = 70
     bass_volume = 80
     drum_volume = 90
     
-    for symbol in morse_code:
-        if symbol == '.':
-            # Dot: use scale notes with some variation
-            pitch = random.choice(scale_notes[:5])  # Use lower part of scale for dots
-            midi.addNote(melody_track, 0, pitch, time, duration_unit, volume)
-            time += duration_unit + duration_unit  # dot + intra-symbol gap
-            
-        elif symbol == '-':
-            # Dash: use higher scale notes
-            pitch = random.choice(scale_notes[3:])  # Use higher part of scale for dashes
-            midi.addNote(melody_track, 0, pitch, time, duration_unit * 3, volume)
-            time += duration_unit * 3 + duration_unit  # dash + intra-symbol gap
-            
-        elif symbol == ' ':
-            time += duration_unit * 3  # gap between letters
-            
-        elif symbol == '/':
-            time += duration_unit * 7  # gap between words
+    # Parse morse code into phrases
+    symbols = [s for s in morse_code if s in '.-']
+    phrase_boundaries = []
+    current_phrase = []
     
-    # Add harmony track
-    if add_harmony:
-        harmony_time = 0
-        chord_index = 0
-        
-        while harmony_time < time:
-            # Get current chord root
-            chord_root = key_root + progression[chord_index % len(progression)]
-            chord_notes = get_chord_notes(chord_root, 'major')
-            
-            # Add chord notes
-            for note in chord_notes:
-                midi.addNote(harmony_track, 1, note, harmony_time, chord_duration, harmony_volume)
-            
-            harmony_time += chord_duration
-            chord_index += 1
+    i = 0
+    for char in morse_code:
+        if char in '.-':
+            current_phrase.append((char, i))
+            i += 1
+        elif char == ' ' and current_phrase:
+            # End of letter
+            phrase_boundaries.append(current_phrase)
+            current_phrase = []
+        elif char == '/' and current_phrase:
+            # End of word
+            phrase_boundaries.append(current_phrase)
+            current_phrase = []
     
-    # Add bass line
-    if add_bass:
-        bass_time = 0
-        chord_index = 0
-        bass_pattern_duration = chord_duration / 4  # Quarter notes
-        
-        while bass_time < time:
-            chord_root = key_root + progression[chord_index % len(progression)] - 12  # One octave lower
-            
-            # Simple bass pattern: root, fifth, root, fifth
-            bass_notes = [chord_root, chord_root + 7, chord_root, chord_root + 7]
-            
-            for bass_note in bass_notes:
-                if bass_time < time:
-                    midi.addNote(bass_track, 2, bass_note, bass_time, bass_pattern_duration, bass_volume)
-                    bass_time += bass_pattern_duration
-            
-            chord_index += 1
+    if current_phrase:
+        phrase_boundaries.append(current_phrase)
     
-    # Add simple drum pattern
-    if add_drums:
-        drum_time = 0
-        beat_duration = duration_unit
-        kick_drum = 36  # C2
-        snare_drum = 38  # D2
-        hi_hat = 42     # F#2
-        
-        while drum_time < time:
-            # Simple 4/4 pattern
-            beat_in_measure = int(drum_time / beat_duration) % 4
-            
-            if beat_in_measure == 0:  # Beat 1 - kick
-                midi.addNote(drum_track, 9, kick_drum, drum_time, beat_duration, drum_volume)
-            elif beat_in_measure == 2:  # Beat 3 - snare
-                midi.addNote(drum_track, 9, snare_drum, drum_time, beat_duration, drum_volume)
-            
-            # Hi-hat on every beat
-            midi.addNote(drum_track, 9, hi_hat, drum_time, beat_duration * 0.5, drum_volume // 2)
-            
-            drum_time += beat_duration
-    
-    # Write MIDI file
-    with open(output_file, 'wb') as f:
-        midi.writeFile(f)
-
-def morse_to_ai_enhanced_midi(morse_code, output_file, **kwargs):
-    """
-    AI-Enhanced MIDI generator with melodically intelligent features
-    """
-    # Extract parameters with defaults
-    tempo = kwargs.get('tempo', 120)
-    key_root = kwargs.get('key_root', 60)
-    scale_type = kwargs.get('scale_type', 'major')
-    style = kwargs.get('style', 'ballad')
-    add_harmony = kwargs.get('add_harmony', True)
-    add_bass = kwargs.get('add_bass', True)
-    add_drums = kwargs.get('add_drums', False)
-    chord_progression = kwargs.get('chord_progression', 'classic')
-    melody_instrument = kwargs.get('melody_instrument', 0)
-    harmony_instrument = kwargs.get('harmony_instrument', 48)
-    bass_instrument = kwargs.get('bass_instrument', 32)
-    
-    duration_unit = 0.25
+    # Generate beautiful melodies for each phrase
     time = 0
-    
-    # Initialize enhanced melodic AI
-    ai = MelodicAI(key_root, scale_type, style)
-    
-    # Create MIDI file with multiple tracks
-    num_tracks = 1
-    if add_harmony: num_tracks += 1
-    if add_bass: num_tracks += 1
-    if add_drums: num_tracks += 1
-    
-    midi = MIDIFile(num_tracks)
-    
-    # Set up tracks
-    melody_track = 0
-    harmony_track = 1 if add_harmony else None
-    bass_track = (2 if add_harmony else 1) if add_bass else None
-    drum_track = num_tracks - 1 if add_drums else None
-    
-    # Add tempo to all tracks
-    for track in range(num_tracks):
-        midi.addTempo(track, 0, tempo)
-    
-    # Set instruments
-    midi.addProgramChange(melody_track, 0, 0, melody_instrument)
-    if add_harmony:
-        midi.addProgramChange(harmony_track, 1, 0, harmony_instrument)
-    if add_bass:
-        midi.addProgramChange(bass_track, 2, 0, bass_instrument)
-    if add_drums:
-        midi.addProgramChange(drum_track, 9, 0, 0)
-    
-    # Generate melodically enhanced melody
-    volume = 100
-    harmony_volume = 70
-    bass_volume = 80
-    drum_volume = 90
-    
-    melody_notes = []
-    phrase_position = 0
-    
-    # Process morse code with musical phrasing
-    symbols = list(morse_code)
-    for i, symbol in enumerate(symbols):
-        if symbol == '.':
-            pitch = ai.choose_melodic_note('.', phrase_position, **kwargs)
-            note_duration = duration_unit
-            rest_duration = duration_unit * 0.5
+    for phrase in phrase_boundaries:
+        phrase_length = len(phrase)
+        
+        for pos, (symbol, _) in enumerate(phrase):
+            # Generate melodically intelligent note
+            pitch = melody_ai.generate_melodic_note(symbol, pos, phrase_length)
             
-            final_time, final_duration, final_velocity = ai.apply_humanization(
-                time, note_duration, volume, **kwargs)
+            if symbol == '.':
+                note_duration = duration_unit
+                rest_duration = duration_unit * 0.5
+            else:  # dash
+                note_duration = duration_unit * 3
+                rest_duration = duration_unit * 0.5
             
-            midi.addNote(melody_track, 0, pitch, final_time, final_duration, final_velocity)
-            melody_notes.append((pitch, time, note_duration))
+            # Add musical expression
+            velocity = volume + random.randint(-15, 15)  # Natural dynamics
+            actual_time = time + random.uniform(-0.02, 0.02)  # Humanize timing
+            
+            midi.addNote(melody_track, 0, pitch, actual_time, note_duration, velocity)
             time += note_duration + rest_duration
-            phrase_position += 1
-            
-        elif symbol == '-':
-            pitch = ai.choose_melodic_note('-', phrase_position, **kwargs)
-            note_duration = duration_unit * 3
-            rest_duration = duration_unit * 0.5
-            
-            final_time, final_duration, final_velocity = ai.apply_humanization(
-                time, note_duration, volume, **kwargs)
-            
-            midi.addNote(melody_track, 0, pitch, final_time, final_duration, final_velocity)
-            melody_notes.append((pitch, time, note_duration))
-            time += note_duration + rest_duration
-            phrase_position += 1
-            
-        elif symbol == ' ':
-            # End of letter - create phrase ending if we have enough notes
-            if phrase_position >= 3:
-                ending_note = ai.create_phrase_ending(phrase_position)
-                ending_time, ending_duration, ending_velocity = ai.apply_humanization(
-                    time, duration_unit * 0.5, volume - 20, **kwargs)
-                midi.addNote(melody_track, 0, ending_note, ending_time, ending_duration, ending_velocity)
-                melody_notes.append((ending_note, time, duration_unit * 0.5))
-                time += duration_unit * 0.5
-            
-            time += duration_unit * 2.5
-            phrase_position = 0
-            
-        elif symbol == '/':
-            # End of word - stronger phrase ending
-            if phrase_position >= 2:
-                ending_note = ai.create_phrase_ending(phrase_position)
-                ending_time, ending_duration, ending_velocity = ai.apply_humanization(
-                    time, duration_unit, volume - 10, **kwargs)
-                midi.addNote(melody_track, 0, ending_note, ending_time, ending_duration, ending_velocity)
-                melody_notes.append((ending_note, time, duration_unit))
-                time += duration_unit
-            
-            time += duration_unit * 6
-            phrase_position = 0
+        
+        # Add phrase ending
+        if phrase_length >= 2:
+            ending_note = melody_ai.create_phrase_ending()
+            midi.addNote(melody_track, 0, ending_note, time, duration_unit, volume - 20)
+            time += duration_unit
+        
+        # Rest between phrases
+        time += duration_unit * 3
     
-    # Add AI-enhanced harmony track
+    # Add harmony track (enhanced with melody awareness)
     if add_harmony:
         harmony_time = 0
         chord_duration = duration_unit * 8
         chord_index = 0
+        progression = CHORD_PROGRESSIONS[chord_progression]
         
         while harmony_time < time:
-            melody_in_period = [
-                note for note, note_time, dur in melody_notes 
-                if harmony_time <= note_time < harmony_time + chord_duration
-            ]
+            # Choose chord root from progression
+            chord_root = key_root + progression[chord_index % len(progression)]
             
-            if melody_in_period:
-                main_melody_note = melody_in_period[len(melody_in_period)//2]
-                chord_notes = ai.generate_smart_harmony(
-                    main_melody_note, harmony_time, chord_index, **kwargs)
+            # Enhanced chord selection based on scale
+            if scale_type in ['minor', 'harmonic_minor', 'melodic_minor']:
+                chord_notes = get_chord_notes(chord_root, 'minor')
+            elif scale_type == 'blues':
+                chord_notes = get_chord_notes(chord_root, 'dom7')
             else:
-                progression = CHORD_PROGRESSIONS[chord_progression]
-                chord_root = key_root + progression[chord_index % len(progression)]
                 chord_notes = get_chord_notes(chord_root, 'major')
             
+            # Add chord with slight timing variations
             for i, note in enumerate(chord_notes):
-                final_time, final_duration, final_velocity = ai.apply_humanization(
-                    harmony_time + i * 0.01, chord_duration, harmony_volume, **kwargs)
-                midi.addNote(harmony_track, 1, note, final_time, final_duration, final_velocity)
+                note_time = harmony_time + i * 0.01  # Slight roll
+                midi.addNote(harmony_track, 1, note, note_time, chord_duration, harmony_volume)
             
             harmony_time += chord_duration
             chord_index += 1
     
-    # Add bass and drums (same as before)
+    # Enhanced bass line
     if add_bass:
         bass_time = 0
         chord_duration = duration_unit * 8
@@ -766,69 +491,70 @@ def morse_to_ai_enhanced_midi(morse_code, output_file, **kwargs):
         progression = CHORD_PROGRESSIONS[chord_progression]
         
         while bass_time < time:
-            current_chord_root = key_root + progression[chord_index % len(progression)]
-            next_chord_root = key_root + progression[(chord_index + 1) % len(progression)]
+            chord_root = key_root + progression[chord_index % len(progression)] - 12
             
-            current_chord = get_chord_notes(current_chord_root, 'major')
-            next_chord = get_chord_notes(next_chord_root, 'major')
+            # More interesting bass patterns
+            if scale_type == 'jazz':
+                # Walking bass
+                pattern = [chord_root, chord_root + 7, chord_root + 3, chord_root + 5]
+            elif scale_type == 'blues':
+                # Blues bass
+                pattern = [chord_root, chord_root, chord_root + 7, chord_root]
+            else:
+                # Standard root-fifth pattern
+                pattern = [chord_root, chord_root + 7, chord_root, chord_root + 7]
             
-            bass_notes = ai.generate_walking_bass(
-                current_chord, next_chord, chord_duration, **kwargs)
-            
-            for bass_note, note_duration in bass_notes:
+            step_duration = chord_duration / len(pattern)
+            for bass_note in pattern:
                 if bass_time < time:
-                    final_time, final_duration, final_velocity = ai.apply_humanization(
-                        bass_time, note_duration, bass_volume, **kwargs)
-                    midi.addNote(bass_track, 2, bass_note, final_time, final_duration, final_velocity)
-                    bass_time += note_duration
+                    midi.addNote(bass_track, 2, bass_note, bass_time, step_duration, bass_volume)
+                    bass_time += step_duration
             
             chord_index += 1
     
+    # Enhanced drum patterns
     if add_drums:
         drum_time = 0
         beat_duration = duration_unit
         kick_drum = 36
         snare_drum = 38
         hi_hat = 42
-        open_hat = 46
         
         while drum_time < time:
             beat_in_measure = int(drum_time / beat_duration) % 4
             
-            # Enhanced drum patterns based on style
-            if style == 'jazz':
-                # Jazz swing pattern
-                if beat_in_measure == 0:  # Beat 1
+            # Scale-appropriate drum patterns
+            if scale_type in ['blues', 'jazz']:
+                # Swing feel
+                if beat_in_measure == 0:
                     midi.addNote(drum_track, 9, kick_drum, drum_time, beat_duration, drum_volume)
-                    midi.addNote(drum_track, 9, hi_hat, drum_time, beat_duration * 0.3, drum_volume // 3)
-                elif beat_in_measure == 2:  # Beat 3
+                elif beat_in_measure == 2:
                     midi.addNote(drum_track, 9, snare_drum, drum_time, beat_duration, drum_volume)
                 
                 # Swing hi-hat
-                if beat_in_measure % 2 == 0:
+                midi.addNote(drum_track, 9, hi_hat, drum_time, beat_duration * 0.6, drum_volume // 3)
+                if beat_in_measure % 2 == 1:
                     midi.addNote(drum_track, 9, hi_hat, drum_time + beat_duration * 0.67, 
                                beat_duration * 0.33, drum_volume // 4)
             else:
-                # Standard rock/pop pattern
-                if beat_in_measure == 0:  # Beat 1 - kick
+                # Standard rock pattern
+                if beat_in_measure == 0:
                     midi.addNote(drum_track, 9, kick_drum, drum_time, beat_duration, drum_volume)
-                elif beat_in_measure == 2:  # Beat 3 - snare
+                elif beat_in_measure == 2:
                     midi.addNote(drum_track, 9, snare_drum, drum_time, beat_duration, drum_volume)
                 
-                # Hi-hat on every beat
-                hat_volume = drum_volume // 3
-                if beat_in_measure == 1 or beat_in_measure == 3:
-                    # Occasionally open hi-hat on off-beats
-                    hat_drum = open_hat if random.random() < 0.1 else hi_hat
-                    midi.addNote(drum_track, 9, hat_drum, drum_time, beat_duration * 0.5, hat_volume)
-                else:
-                    midi.addNote(drum_track, 9, hi_hat, drum_time, beat_duration * 0.5, hat_volume)
+                midi.addNote(drum_track, 9, hi_hat, drum_time, beat_duration * 0.5, drum_volume // 3)
             
             drum_time += beat_duration
     
     # Write MIDI file
     with open(output_file, 'wb') as f:
         midi.writeFile(f)
+
+# Keep your existing functions for compatibility
+def morse_to_ai_enhanced_midi(morse_code, output_file, **kwargs):
+    """Alias for the improved function"""
+    return morse_to_enhanced_midi(morse_code, output_file, **kwargs)
 
 def midi_to_wav(midi_path, wav_path, soundfont_path=None):
     """Convert MIDI to WAV using FluidSynth"""
@@ -920,37 +646,18 @@ def enhanced_midi_to_wav(midi_path, wav_path):
 
 def generate_enhanced_files_from_text(text, **musical_options):
     """
-    Generate AI-enhanced musical files from text with full customization
-    
-    All original musical options plus new AI features:
-    - ai_harmony: Intelligent chord progressions that follow melody
-    - walking_bass: Smart bass lines with musical movement
-    - humanize: Natural timing and dynamic variations
-    - smart_dynamics: Expressive musical phrasing
-    - style: Musical style affecting all AI decisions
+    Generate enhanced musical files from text with improved melody generation
     """
     morse = text_to_morse(text)
     tmpdir = tempfile.gettempdir()
     
     # Create unique filenames based on message
     safe_text = "".join(c for c in text if c.isalnum())[:10]
-    midi_path = os.path.join(tmpdir, f"ai_morse_{safe_text}.mid")
-    wav_path = os.path.join(tmpdir, f"ai_morse_{safe_text}.wav")
+    midi_path = os.path.join(tmpdir, f"enhanced_morse_{safe_text}.mid")
+    wav_path = os.path.join(tmpdir, f"enhanced_morse_{safe_text}.wav")
     
-    # Check if AI features are requested
-    use_ai = any([
-        musical_options.get('ai_harmony', False),
-        musical_options.get('walking_bass', False),
-        musical_options.get('humanize', False),
-        musical_options.get('smart_dynamics', False)
-    ])
-    
-    if use_ai:
-        # Use the new AI-enhanced function
-        morse_to_ai_enhanced_midi(morse, midi_path, **musical_options)
-    else:
-        # Use the original function for compatibility
-        morse_to_enhanced_midi(morse, midi_path, **musical_options)
+    # Use the improved function
+    morse_to_enhanced_midi(morse, midi_path, **musical_options)
     
     # Convert to WAV
     soundfont_path = os.path.expanduser("~/soundfonts/FluidR3_GM.sf2")
