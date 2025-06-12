@@ -649,11 +649,22 @@ def generate_wav_from_notes(melody_notes: List[Note], harmony_notes: List[Note] 
     import io
     wav_buffer = io.BytesIO()
     
-    with wave.open(wav_buffer, 'wb') as wav_file:
-        wav_file.setnchannels(2)  # Stereo
-        wav_file.setsampwidth(2)  # 16-bit
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(stereo_audio.tobytes())
+    # Write WAV file manually
+    # WAV header
+    wav_buffer.write(b'RIFF')
+    wav_buffer.write(struct.pack('<I', 36 + len(stereo_audio) * 2))  # File size
+    wav_buffer.write(b'WAVE')
+    wav_buffer.write(b'fmt ')
+    wav_buffer.write(struct.pack('<I', 16))  # Subchunk1 size
+    wav_buffer.write(struct.pack('<H', 1))   # Audio format (PCM)
+    wav_buffer.write(struct.pack('<H', 2))   # Channels (stereo)
+    wav_buffer.write(struct.pack('<I', sample_rate))  # Sample rate
+    wav_buffer.write(struct.pack('<I', sample_rate * 2 * 2))  # Byte rate
+    wav_buffer.write(struct.pack('<H', 4))   # Block align
+    wav_buffer.write(struct.pack('<H', 16))  # Bits per sample
+    wav_buffer.write(b'data')
+    wav_buffer.write(struct.pack('<I', len(stereo_audio) * 2))  # Data size
+    wav_buffer.write(stereo_audio.tobytes())
     
     return wav_buffer.getvalue()
 
