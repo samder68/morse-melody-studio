@@ -1,703 +1,592 @@
 import streamlit as st
-import mido
+import random
+import math
+import tempfile
 import os
-import json
-import base64
-from enhanced_morse_music import (
-    generate_enhanced_files_from_text, 
-    INSTRUMENT_PRESETS, 
-    KEY_PRESETS,
-    SCALES,
-    CHORD_PROGRESSIONS
-)
+from midiutil import MIDIFile
+import mido
+from typing import List, Tuple
+from dataclasses import dataclass
+from enum import Enum
 
-# Morse code dictionary for decoding
-MORSE_CODE_DICT = {
-    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..',
-    'E': '.', 'F': '..-.', 'G': '--.', 'H': '....',
-    'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
-    'M': '--', 'N': '-.', 'O': '---', 'P': '.--.',
-    'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-',
-    'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
-    'Y': '-.--', 'Z': '--..', '1': '.----', '2': '..---',
-    '3': '...--', '4': '....-', '5': '.....', '6': '-....',
-    '7': '--...', '8': '---..', '9': '----.', '0': '-----',
-    ' ': '/'
-}
-REVERSE_MORSE = {v: k for k, v in MORSE_CODE_DICT.items()}
-
+# Set page config
 st.set_page_config(
-    page_title="🎵 Enhanced Morse Melody Studio", 
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="🎵 Intelligent Morse Melody Studio",
+    page_icon="🎵",
+    layout="wide"
 )
 
-st.title("🎵 Enhanced Morse Melody Studio")
-st.caption("Create beautiful, musical compositions while encoding secret messages in Morse code")
+# Morse code dictionary
+MORSE_CODE = {
+    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
+    'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..',
+    'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.',
+    'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-',
+    'Y': '-.--', 'Z': '--..', '0': '-----', '1': '.----', '2': '..---',
+    '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...',
+    '8': '---..', '9': '----.', ' ': '/'
+}
 
-def midi_to_json(midi_path):
-    """Convert MIDI file to JSON for web audio playback"""
-    try:
-        mid = mido.MidiFile(midi_path)
+class MusicKey(Enum):
+    C_MAJOR = {"root": 60, "scale": [0, 2, 4, 5, 7, 9, 11], "name": "C Major"}
+    G_MAJOR = {"root": 67, "scale": [0, 2, 4, 5, 7, 9, 11], "name": "G Major"}
+    D_MAJOR = {"root": 62, "scale": [0, 2, 4, 5, 7, 9, 11], "name": "D Major"}
+    A_MINOR = {"root": 69, "scale": [0, 2, 3, 5, 7, 8, 10], "name": "A Minor"}
+    E_MINOR = {"root": 64, "scale": [0, 2, 3, 5, 7, 8, 10], "name": "E Minor"}
+    C_PENTATONIC = {"root": 60, "scale": [0, 2, 4, 7, 9], "name": "C Pentatonic"}
+    A_BLUES = {"root": 69, "scale": [0, 3, 5, 6, 7, 10], "name": "A Blues"}
+
+class MusicStyle(Enum):
+    CLASSICAL = {"tempo": 90, "dynamics": "gentle", "name": "Classical"}
+    FOLK = {"tempo": 110, "dynamics": "warm", "name": "Folk"}
+    JAZZ = {"tempo": 120, "dynamics": "swing", "name": "Jazz"}
+    AMBIENT = {"tempo": 75, "dynamics": "floating", "name": "Ambient"}
+    CELTIC = {"tempo": 105, "dynamics": "lilting", "name": "Celtic"}
+
+@dataclass
+class Note:
+    pitch: int
+    start_time: float
+    duration: float
+    velocity: int
+    channel: int = 0
+
+class IntelligentMelodyGenerator:
+    """Completely new melody generator that creates genuinely musical phrases"""
+    
+    def __init__(self, key: MusicKey, style: MusicStyle):
+        self.key = key.value
+        self.style = style.value
+        self.scale_notes = self._generate_scale_notes()
+        
+        # Musical memory for intelligent decisions
+        self.recent_notes = []
+        self.phrase_position = 0
+        self.phrase_direction = 0
+        
+        # Musical intelligence parameters
+        self.interval_preferences = self._create_interval_preferences()
+        self.phrase_contour = self._create_phrase_contour()
+        
+    def _generate_scale_notes(self) -> List[int]:
+        """Generate scale notes across multiple octaves"""
         notes = []
+        root = self.key["root"]
+        scale = self.key["scale"]
         
-        for i, track in enumerate(mid.tracks):
-            current_time = 0
-            active_notes = {}
+        # Generate 3 octaves
+        for octave in [-1, 0, 1]:
+            for degree in scale:
+                note = root + (octave * 12) + degree
+                if 36 <= note <= 96:  # Keep in reasonable MIDI range
+                    notes.append(note)
+        
+        return sorted(notes)
+    
+    def _create_interval_preferences(self) -> dict:
+        """Create interval preferences based on musical style"""
+        base_prefs = {
+            1: 0.20,   # Half step
+            2: 0.30,   # Whole step
+            3: 0.15,   # Minor third
+            4: 0.15,   # Major third
+            5: 0.10,   # Perfect fourth
+            7: 0.08,   # Perfect fifth
+            12: 0.02   # Octave
+        }
+        
+        # Modify based on style
+        if self.style["name"] == "Jazz":
+            base_prefs[3] *= 1.5  # More thirds
+            base_prefs[7] *= 1.5  # More fifths
+        elif self.style["name"] == "Celtic":
+            base_prefs[5] *= 1.8  # More fourths
+            base_prefs[7] *= 1.3  # More fifths
+        elif self.style["name"] == "Ambient":
+            base_prefs[1] *= 2.0  # More half steps
+            base_prefs[2] *= 1.5  # More whole steps
             
-            for msg in track:
-                current_time += msg.time
+        return base_prefs
+    
+    def _create_phrase_contour(self) -> List[float]:
+        """Create a natural phrase contour (musical arc)"""
+        if self.style["name"] == "Classical":
+            # Classical arch: start low, peak 2/3 through, resolve down
+            return [0.2, 0.4, 0.6, 0.8, 0.9, 0.7, 0.4, 0.1]
+        elif self.style["name"] == "Folk":
+            # Folk: simple wave pattern
+            return [0.3, 0.6, 0.4, 0.7, 0.5, 0.8, 0.3, 0.2]
+        elif self.style["name"] == "Jazz":
+            # Jazz: more complex, unexpected
+            return [0.4, 0.2, 0.8, 0.3, 0.9, 0.1, 0.6, 0.4]
+        elif self.style["name"] == "Celtic":
+            # Celtic: flowing, modal
+            return [0.5, 0.7, 0.3, 0.8, 0.4, 0.9, 0.2, 0.5]
+        else:  # Ambient
+            # Ambient: gentle floating
+            return [0.4, 0.5, 0.6, 0.5, 0.4, 0.6, 0.5, 0.4]
+    
+    def _get_phrase_target(self, position: int) -> float:
+        """Get the target height for this position in the phrase"""
+        if not self.phrase_contour:
+            return 0.5
+        
+        index = min(position, len(self.phrase_contour) - 1)
+        return self.phrase_contour[index]
+    
+    def _choose_note_intelligently(self, morse_symbol: str, phrase_pos: int) -> int:
+        """Choose a note using musical intelligence"""
+        
+        # First note of the piece
+        if not self.recent_notes:
+            # Start in a comfortable middle range
+            middle_notes = [n for n in self.scale_notes if self.key["root"] <= n <= self.key["root"] + 7]
+            return random.choice(middle_notes)
+        
+        current_note = self.recent_notes[-1]
+        phrase_target = self._get_phrase_target(phrase_pos)
+        
+        # Determine if we should go up, down, or stay
+        current_height = (current_note - min(self.scale_notes)) / (max(self.scale_notes) - min(self.scale_notes))
+        
+        if current_height < phrase_target - 0.2:
+            direction = 1  # Go up
+        elif current_height > phrase_target + 0.2:
+            direction = -1  # Go down
+        else:
+            direction = random.choice([-1, 1])  # Either way
+        
+        # Modify direction based on morse symbol
+        if morse_symbol == '.' and random.random() < 0.3:
+            direction = -1  # Dots tend to be lower
+        elif morse_symbol == '-' and random.random() < 0.3:
+            direction = 1   # Dashes tend to be higher
+        
+        # Choose interval based on preferences and recent motion
+        intervals = list(self.interval_preferences.keys())
+        weights = list(self.interval_preferences.values())
+        
+        # Avoid too much motion in one direction
+        if len(self.recent_notes) >= 3:
+            recent_direction = sum([
+                1 if self.recent_notes[i] > self.recent_notes[i-1] else -1
+                for i in range(-2, 0)
+            ])
+            if abs(recent_direction) >= 2:  # Too much in one direction
+                direction *= -1  # Force change
+        
+        # Choose interval
+        chosen_interval = random.choices(intervals, weights=weights)[0]
+        candidate_note = current_note + (chosen_interval * direction)
+        
+        # Snap to nearest scale note
+        final_note = min(self.scale_notes, key=lambda x: abs(x - candidate_note))
+        
+        # Ensure we don't go out of range
+        if final_note < min(self.scale_notes) or final_note > max(self.scale_notes):
+            final_note = current_note  # Stay put if out of range
+        
+        self.recent_notes.append(final_note)
+        if len(self.recent_notes) > 6:  # Keep only recent notes
+            self.recent_notes.pop(0)
+        
+        return final_note
+    
+    def generate_melody(self, morse_text: str) -> List[Note]:
+        """Generate a beautiful melody from morse code"""
+        notes = []
+        current_time = 0.0
+        dot_duration = 0.25
+        dash_duration = 0.75
+        
+        # Convert text to morse
+        morse_sequence = []
+        for char in morse_text.upper():
+            if char in MORSE_CODE:
+                morse_sequence.extend(list(MORSE_CODE[char]))
+                morse_sequence.append(' ')  # Letter separation
+            elif char == ' ':
+                morse_sequence.append('/')  # Word separation
+        
+        # Generate melody with musical intelligence
+        phrase_pos = 0
+        for symbol in morse_sequence:
+            if symbol == '.':
+                pitch = self._choose_note_intelligently('.', phrase_pos)
+                velocity = random.randint(70, 90)
+                notes.append(Note(pitch, current_time, dot_duration, velocity))
+                current_time += dot_duration + 0.1  # Small gap
+                phrase_pos += 1
                 
-                if msg.type == 'note_on' and msg.velocity > 0:
-                    active_notes[msg.note] = {
-                        'start': current_time / mid.ticks_per_beat,
-                        'note': msg.note,
-                        'velocity': msg.velocity,
-                        'track': i
-                    }
-                elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-                    if msg.note in active_notes:
-                        note_info = active_notes[msg.note]
-                        note_info['duration'] = (current_time / mid.ticks_per_beat) - note_info['start']
-                        notes.append(note_info)
-                        del active_notes[msg.note]
-        
-        return json.dumps(notes)
-    except:
-        return "[]"
-
-def create_audio_player(midi_json_data, tempo=120):
-    """Create a web audio player for MIDI data"""
-    audio_html = f"""
-    <div style="background: #f0f2f6; padding: 20px; border-radius: 10px; margin: 10px 0;">
-        <h4>🎧 Audio Player</h4>
-        <button id="playBtn" onclick="togglePlay()" style="
-            background: #ff6b6b; 
-            color: white; 
-            border: none; 
-            padding: 10px 20px; 
-            border-radius: 5px; 
-            cursor: pointer;
-            font-size: 16px;
-            margin-right: 10px;
-        ">▶️ Play</button>
-        <button onclick="stopAudio()" style="
-            background: #666; 
-            color: white; 
-            border: none; 
-            padding: 10px 20px; 
-            border-radius: 5px; 
-            cursor: pointer;
-            font-size: 16px;
-        ">⏹️ Stop</button>
-        <div id="progress" style="
-            width: 100%; 
-            height: 10px; 
-            background: #ddd; 
-            border-radius: 5px; 
-            margin: 10px 0;
-            overflow: hidden;
-        ">
-            <div id="progressBar" style="
-                width: 0%; 
-                height: 100%; 
-                background: #ff6b6b; 
-                transition: width 0.1s;
-            "></div>
-        </div>
-        <span id="timeDisplay">0:00 / 0:00</span>
-    </div>
-
-    <script>
-    let audioContext;
-    let isPlaying = false;
-    let startTime;
-    let pauseTime = 0;
-    let scheduledNotes = [];
-    let totalDuration = 0;
-    
-    const midiData = {midi_json_data};
-    const tempo = {tempo};
-    
-    if (midiData.length > 0) {{
-        totalDuration = Math.max(...midiData.map(note => note.start + note.duration)) * (60 / tempo);
-    }}
-    
-    function midiToFreq(midiNote) {{
-        return 440 * Math.pow(2, (midiNote - 69) / 12);
-    }}
-    
-    function formatTime(seconds) {{
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${{mins}}:${{secs.toString().padStart(2, '0')}}`;
-    }}
-    
-    function updateProgress() {{
-        if (isPlaying && startTime) {{
-            const elapsed = (audioContext.currentTime - startTime + pauseTime) * (tempo / 60);
-            const progress = Math.min(elapsed / Math.max(...midiData.map(note => note.start + note.duration)) * 100, 100);
-            document.getElementById('progressBar').style.width = progress + '%';
-            
-            const currentTime = elapsed * (60 / tempo);
-            document.getElementById('timeDisplay').textContent = 
-                `${{formatTime(currentTime)}} / ${{formatTime(totalDuration)}}`;
-            
-            if (progress < 100) {{
-                requestAnimationFrame(updateProgress);
-            }} else {{
-                stopAudio();
-            }}
-        }}
-    }}
-    
-    function playNote(frequency, startTime, duration, velocity = 80) {{
-        if (!audioContext) return;
-        
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.setValueAtTime(frequency, startTime);
-        oscillator.type = 'triangle';
-        
-        const volume = (velocity / 127) * 0.1;
-        gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-        
-        oscillator.start(startTime);
-        oscillator.stop(startTime + duration);
-        
-        return oscillator;
-    }}
-    
-    async function togglePlay() {{
-        if (!audioContext) {{
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }}
-        
-        if (audioContext.state === 'suspended') {{
-            await audioContext.resume();
-        }}
-        
-        if (!isPlaying) {{
-            startTime = audioContext.currentTime;
-            isPlaying = true;
-            document.getElementById('playBtn').innerHTML = '⏸️ Pause';
-            
-            midiData.forEach(note => {{
-                const frequency = midiToFreq(note.note);
-                const startTime = audioContext.currentTime + (note.start - pauseTime) * (60 / tempo);
-                const duration = note.duration * (60 / tempo);
+            elif symbol == '-':
+                pitch = self._choose_note_intelligently('-', phrase_pos)
+                velocity = random.randint(75, 95)
+                notes.append(Note(pitch, current_time, dash_duration, velocity))
+                current_time += dash_duration + 0.1  # Small gap
+                phrase_pos += 1
                 
-                if (startTime >= audioContext.currentTime) {{
-                    const oscillator = playNote(frequency, startTime, duration, note.velocity);
-                    scheduledNotes.push(oscillator);
-                }}
-            }});
+            elif symbol == ' ':
+                current_time += 0.3  # Letter gap
+                
+            elif symbol == '/':
+                current_time += 0.8  # Word gap
+                phrase_pos = 0  # Reset phrase position
+        
+        return notes
+
+class ChordProgressionGenerator:
+    """Generate intelligent chord progressions that complement the melody"""
+    
+    def __init__(self, key: MusicKey, style: MusicStyle):
+        self.key = key.value
+        self.style = style.value
+        self.progressions = self._create_progressions()
+    
+    def _create_progressions(self) -> dict:
+        """Create different chord progressions for different styles"""
+        root = self.key["root"]
+        
+        progressions = {
+            "Classical": [
+                [root, root + 4, root + 7],           # I
+                [root + 9, root + 1, root + 4],       # vi
+                [root + 5, root + 9, root + 0],       # IV
+                [root + 7, root + 11, root + 2]       # V
+            ],
+            "Folk": [
+                [root, root + 4, root + 7],           # I
+                [root + 7, root + 11, root + 2],      # V
+                [root + 5, root + 9, root + 0],       # IV
+                [root, root + 4, root + 7]            # I
+            ],
+            "Jazz": [
+                [root, root + 4, root + 7, root + 11], # Imaj7
+                [root + 9, root + 1, root + 4, root + 8], # vi7
+                [root + 2, root + 6, root + 9, root + 0], # ii7
+                [root + 7, root + 11, root + 2, root + 5] # V7
+            ],
+            "Celtic": [
+                [root, root + 7],                     # I (open fifth)
+                [root + 7, root + 2],                 # V
+                [root + 5, root + 0],                 # IV
+                [root, root + 7]                      # I
+            ],
+            "Ambient": [
+                [root, root + 4, root + 7, root + 11, root + 14], # Extended chords
+                [root + 2, root + 6, root + 9, root + 1, root + 4],
+                [root + 5, root + 9, root + 0, root + 4, root + 7],
+                [root - 5, root - 1, root + 2, root + 6, root + 9]
+            ]
+        }
+        
+        return progressions.get(self.style["name"], progressions["Classical"])
+    
+    def generate_harmony(self, melody_duration: float) -> List[Note]:
+        """Generate harmony notes to accompany the melody"""
+        harmony_notes = []
+        chord_duration = 2.0  # Each chord lasts 2 beats
+        current_time = 0.0
+        chord_index = 0
+        
+        while current_time < melody_duration:
+            chord = self.progressions[chord_index % len(self.progressions)]
             
-            updateProgress();
-        }} else {{
-            pauseTime += audioContext.currentTime - startTime;
-            stopAudio();
-        }}
-    }}
-    
-    function stopAudio() {{
-        isPlaying = false;
-        document.getElementById('playBtn').innerHTML = '▶️ Play';
+            # Add chord notes with slight timing variations
+            for i, pitch in enumerate(chord):
+                note_time = current_time + (i * 0.02)  # Slight roll
+                velocity = random.randint(50, 70)  # Softer than melody
+                harmony_notes.append(Note(pitch - 12, note_time, chord_duration, velocity, channel=1))
+            
+            current_time += chord_duration
+            chord_index += 1
         
-        scheduledNotes.forEach(oscillator => {{
-            try {{
-                oscillator.stop();
-            }} catch(e) {{}}
-        }});
-        scheduledNotes = [];
-        
-        pauseTime = 0;
-        document.getElementById('progressBar').style.width = '0%';
-        document.getElementById('timeDisplay').textContent = `0:00 / ${{formatTime(totalDuration)}}`;
-    }}
-    
-    document.getElementById('timeDisplay').textContent = `0:00 / ${{formatTime(totalDuration)}}`;
-    </script>
-    """
-    
-    return audio_html
+        return harmony_notes
 
-tab1, tab2 = st.tabs(["🎼 Compose & Encode", "🔍 Decode & Analyze"])
-
-# ---------------------- ENCODER TAB ----------------------
-with tab1:
-    st.header("🎹 Musical Composition Studio")
+def create_midi_file(melody_notes: List[Note], harmony_notes: List[Note] = None) -> bytes:
+    """Create a MIDI file from the generated notes"""
+    # Calculate number of tracks
+    num_tracks = 2 if harmony_notes else 1
+    midi = MIDIFile(num_tracks)
     
+    # Set tempo
+    tempo = 120
+    midi.addTempo(0, 0, tempo)
+    if harmony_notes:
+        midi.addTempo(1, 0, tempo)
+    
+    # Set instruments
+    midi.addProgramChange(0, 0, 0, 0)  # Piano for melody
+    if harmony_notes:
+        midi.addProgramChange(1, 1, 0, 48)  # Strings for harmony
+    
+    # Add melody notes
+    for note in melody_notes:
+        midi.addNote(0, note.channel, note.pitch, note.start_time, note.duration, note.velocity)
+    
+    # Add harmony notes
+    if harmony_notes:
+        for note in harmony_notes:
+            midi.addNote(1, note.channel, note.pitch, note.start_time, note.duration, note.velocity)
+    
+    # Create bytes
+    import io
+    midi_bytes = io.BytesIO()
+    midi.writeFile(midi_bytes)
+    return midi_bytes.getvalue()
+
+def main():
+    # Title and description
+    st.title("🎵 Intelligent Morse Melody Studio")
+    st.markdown("**Generate genuinely beautiful melodies that encode your secret messages using advanced musical AI**")
+    
+    # Main interface
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        user_input = st.text_area(
-            "Your Secret Message:", 
-            value="Hope is the frequency",
-            help="This message will be encoded in the melody line using Morse code"
+        # Message input
+        message = st.text_area(
+            "Enter your secret message:",
+            value="Hello World",
+            height=100,
+            help="Your message will be encoded into a beautiful melody using Morse code"
         )
+        
+        # Musical settings
+        st.subheader("🎼 Musical Settings")
+        
+        settings_col1, settings_col2 = st.columns(2)
+        
+        with settings_col1:
+            key = st.selectbox(
+                "Musical Key:",
+                options=list(MusicKey),
+                format_func=lambda x: x.value["name"]
+            )
+            
+            add_harmony = st.checkbox("Add Harmony", value=True, help="Rich chord progressions")
+            
+        with settings_col2:
+            style = st.selectbox(
+                "Musical Style:",
+                options=list(MusicStyle),
+                format_func=lambda x: x.value["name"]
+            )
+            
+            regenerate = st.checkbox("Force New Melody", help="Generate a completely different melody for the same text")
     
     with col2:
-        st.info("💡 **How it works:**\nYour message becomes the melody while harmony, bass, and rhythm create a full musical arrangement!")
-    
-    # Musical Style Presets
-    st.subheader("🎨 Musical Style Presets")
-    style_cols = st.columns(4)
-    
-    with style_cols[0]:
-        if st.button("🎹 Piano Ballad", use_container_width=True):
-            st.session_state.update({
-                'tempo': 80, 'melody_inst': 'Piano', 'harmony_inst': 'Strings',
-                'bass_inst': 'Bass', 'add_harmony': True, 'add_bass': True,
-                'add_drums': False, 'scale_type': 'major', 'chord_prog': 'classic'
-            })
-            st.rerun()
-    
-    with style_cols[1]:
-        if st.button("🎸 Folk Song", use_container_width=True):
-            st.session_state.update({
-                'tempo': 100, 'melody_inst': 'Acoustic Guitar', 'harmony_inst': 'Acoustic Guitar',
-                'bass_inst': 'Bass', 'add_harmony': True, 'add_bass': True,
-                'add_drums': False, 'scale_type': 'pentatonic', 'chord_prog': 'folk'
-            })
-            st.rerun()
-    
-    with style_cols[2]:
-        if st.button("🎺 Jazz Standard", use_container_width=True):
-            st.session_state.update({
-                'tempo': 120, 'melody_inst': 'Trumpet', 'harmony_inst': 'Electric Piano',
-                'bass_inst': 'Bass', 'add_harmony': True, 'add_bass': True,
-                'add_drums': True, 'scale_type': 'dorian', 'chord_prog': 'pop'
-            })
-            st.rerun()
-    
-    with style_cols[3]:
-        if st.button("🌙 Ambient", use_container_width=True):
-            st.session_state.update({
-                'tempo': 70, 'melody_inst': 'Pad', 'harmony_inst': 'Strings',
-                'bass_inst': 'Bass', 'add_harmony': True, 'add_bass': False,
-                'add_drums': False, 'scale_type': 'minor', 'chord_prog': 'minor'
-            })
-            st.rerun()
-    
-    # Musical configuration
-    st.subheader("🎛️ Musical Settings")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.write("**🎵 Basic Settings**")
-        tempo = st.slider("Tempo (BPM)", 60, 180, st.session_state.get('tempo', 120), 5)
-        key_center = st.selectbox("Key Center", list(KEY_PRESETS.keys()), index=0)
-        scale_type = st.selectbox("Scale Type", list(SCALES.keys()), 
-                                 index=list(SCALES.keys()).index(st.session_state.get('scale_type', 'major')))
+        st.info("""
+        **🎵 How it works:**
         
-    with col2:
-        st.write("**🎹 Instruments**")
-        melody_inst = st.selectbox("Melody Instrument", list(INSTRUMENT_PRESETS.keys()), 
-                                  index=list(INSTRUMENT_PRESETS.keys()).index(st.session_state.get('melody_inst', 'Piano')))
-        harmony_inst = st.selectbox("Harmony Instrument", list(INSTRUMENT_PRESETS.keys()), 
-                                   index=list(INSTRUMENT_PRESETS.keys()).index(st.session_state.get('harmony_inst', 'Strings')))
-        bass_inst = st.selectbox("Bass Instrument", list(INSTRUMENT_PRESETS.keys()), 
-                                index=list(INSTRUMENT_PRESETS.keys()).index(st.session_state.get('bass_inst', 'Bass')))
-    
-    with col3:
-        st.write("**🎶 Arrangement**")
-        add_harmony = st.checkbox("Add Harmony Chords", value=st.session_state.get('add_harmony', True))
-        add_bass = st.checkbox("Add Bass Line", value=st.session_state.get('add_bass', True))
-        add_drums = st.checkbox("Add Drum Track", value=st.session_state.get('add_drums', False))
+        🎯 Each letter becomes a unique musical phrase  
+        🎨 Advanced AI creates beautiful, flowing melodies  
+        🎼 Different keys and styles create completely different sounds  
+        🔄 Every generation is unique and musical  
         
-        if add_harmony:
-            chord_prog = st.selectbox("Chord Progression", list(CHORD_PROGRESSIONS.keys()), 
-                                     index=list(CHORD_PROGRESSIONS.keys()).index(st.session_state.get('chord_prog', 'classic')))
-        else:
-            chord_prog = 'classic'
+        **🎹 Try different combinations:**
+        - Classical + C Major = Traditional  
+        - Jazz + A Minor = Sophisticated  
+        - Celtic + G Major = Folk-like  
+        - Ambient + C Pentatonic = Dreamy  
+        """)
     
     # Generate button
-    if st.button("🎵 Generate Musical Composition", type="primary", use_container_width=True):
-        if user_input.strip():
+    if st.button("🎵 Generate Beautiful Melody", type="primary", use_container_width=True):
+        if message.strip():
+            # Set random seed based on message and settings for consistency
+            if not regenerate:
+                seed_string = f"{message}{key.name}{style.name}"
+                random.seed(hash(seed_string) % 1000000)
+            
             with st.spinner("🎼 Composing your musical masterpiece..."):
-                musical_options = {
-                    'tempo': tempo,
-                    'key_root': KEY_PRESETS[key_center],
-                    'scale_type': scale_type,
-                    'add_harmony': add_harmony,
-                    'add_bass': add_bass,
-                    'add_drums': add_drums,
-                    'chord_progression': chord_prog,
-                    'melody_instrument': INSTRUMENT_PRESETS[melody_inst],
-                    'harmony_instrument': INSTRUMENT_PRESETS[harmony_inst],
-                    'bass_instrument': INSTRUMENT_PRESETS[bass_inst]
-                }
-                
                 try:
-                    midi_path, wav_path, morse_code = generate_enhanced_files_from_text(
-                        user_input, **musical_options
-                    )
+                    # Generate melody
+                    melody_gen = IntelligentMelodyGenerator(key, style)
+                    melody_notes = melody_gen.generate_melody(message)
                     
-                    if midi_path and os.path.exists(midi_path):
-                        st.success("✅ Musical Composition Complete!")
+                    # Generate harmony if requested
+                    harmony_notes = None
+                    if add_harmony:
+                        harmony_gen = ChordProgressionGenerator(key, style)
+                        total_duration = max(note.start_time + note.duration for note in melody_notes)
+                        harmony_notes = harmony_gen.generate_harmony(total_duration)
+                    
+                    # Create MIDI file
+                    midi_data = create_midi_file(melody_notes, harmony_notes)
+                    
+                    # Success message
+                    st.success("✨ **Beautiful melody created!**")
+                    
+                    # Display information
+                    info_col1, info_col2 = st.columns(2)
+                    
+                    with info_col1:
+                        st.write("**📝 Your Message:**")
+                        st.code(message.upper())
                         
-                        # Display composition info
-                        col1, col2 = st.columns(2)
+                        # Convert to morse for display
+                        morse_display = ""
+                        for char in message.upper():
+                            if char in MORSE_CODE:
+                                morse_display += MORSE_CODE[char] + " "
+                            elif char == " ":
+                                morse_display += "/ "
                         
-                        with col1:
-                            st.write("**🔤 Encoded Message:**")
-                            st.code(user_input.upper())
-                            st.write("**📻 Morse Code:**")
-                            st.code(morse_code)
-                        
-                        with col2:
-                            st.write("**🎼 Musical Arrangement:**")
-                            arrangement_info = [
-                                f"🎹 Melody: {melody_inst}",
-                                f"🎵 Key: {key_center} {scale_type}",
-                                f"⏱️ Tempo: {tempo} BPM"
-                            ]
-                            if add_harmony:
-                                arrangement_info.append(f"🎶 Harmony: {harmony_inst}")
-                            if add_bass:
-                                arrangement_info.append(f"🎸 Bass: {bass_inst}")
-                            if add_drums:
-                                arrangement_info.append("🥁 Drums: Standard Kit")
-                            
-                            for info in arrangement_info:
-                                st.write(info)
-                        
-                        # Web Audio Player
-                        st.subheader("🎧 Listen to Your Composition")
-                        midi_json = midi_to_json(midi_path)
-                        audio_player_html = create_audio_player(midi_json, tempo)
-                        st.components.v1.html(audio_player_html, height=200)
-                        
-                        # Also show traditional audio player if WAV exists
-                        if wav_path and os.path.exists(wav_path):
-                            st.write("**Or use the built-in audio player:**")
-                            st.audio(wav_path, format='audio/wav')
-                        
-                        # Download buttons
-                        st.subheader("📥 Download Your Files")
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            with open(midi_path, "rb") as f:
-                                midi_bytes = f.read()
-                            filename = f"morse_composition_{user_input[:10].replace(' ', '_')}_{tempo}bpm.mid"
-                            st.download_button(
-                                "📄 Download MIDI File",
-                                midi_bytes,
-                                file_name=filename,
-                                mime="audio/midi",
-                                use_container_width=True
-                            )
-                        
-                        with col2:
-                            if wav_path and os.path.exists(wav_path):
-                                with open(wav_path, "rb") as f:
-                                    wav_bytes = f.read()
-                                filename = f"morse_composition_{user_input[:10].replace(' ', '_')}_{tempo}bpm.wav"
-                                st.download_button(
-                                    "🎵 Download Audio File",
-                                    wav_bytes,
-                                    file_name=filename,
-                                    mime="audio/wav",
-                                    use_container_width=True
-                                )
-                            else:
-                                st.info("💡 MIDI files work in GarageBand, Logic, FL Studio, and many free music apps!")
-                        
-                        with col3:
-                            info_text = f"""MORSE MELODY COMPOSITION
-=========================
+                        st.write("**📻 Morse Code:**")
+                        st.code(morse_display.strip())
+                    
+                    with info_col2:
+                        st.write("**🎼 Musical Details:**")
+                        st.write(f"🎹 **Key:** {key.value['name']}")
+                        st.write(f"🎨 **Style:** {style.value['name']}")
+                        st.write(f"🎵 **Notes:** {len(melody_notes)}")
+                        if harmony_notes:
+                            st.write(f"🎶 **Harmony:** {len(harmony_notes)} chord notes")
+                        else:
+                            st.write("🎶 **Harmony:** None")
+                    
+                    # Download section
+                    st.subheader("📥 Download Your Melody")
+                    
+                    download_col1, download_col2 = st.columns(2)
+                    
+                    with download_col1:
+                        filename = f"morse_melody_{message[:10].replace(' ', '_')}_{key.name}_{style.name}.mid"
+                        st.download_button(
+                            label="🎼 Download MIDI File",
+                            data=midi_data,
+                            file_name=filename,
+                            mime="audio/midi",
+                            use_container_width=True,
+                            help="Works in any music software!"
+                        )
+                    
+                    with download_col2:
+                        # Info file
+                        info_text = f"""Intelligent Morse Melody
+========================
 
-Original Message: {user_input}
-Morse Code: {morse_code}
-Musical Key: {key_center} {scale_type}
-Tempo: {tempo} BPM
+Message: {message}
+Morse Code: {morse_display.strip()}
+Musical Key: {key.value['name']}
+Style: {style.value['name']}
+Notes Generated: {len(melody_notes)}
+Harmony: {'Yes' if harmony_notes else 'No'}
 
-Generated by Enhanced Morse Melody Studio
+Generated by Intelligent Morse Melody Studio
+Advanced Musical AI System
 """
-                            st.download_button(
-                                "📋 Download Info File",
-                                info_text,
-                                file_name=f"composition_info_{user_input[:10].replace(' ', '_')}.txt",
-                                mime="text/plain",
-                                use_container_width=True
-                            )
-                    else:
-                        st.error("❌ Error generating musical files. Please try again.")
-                
+                        st.download_button(
+                            label="📄 Download Info",
+                            data=info_text,
+                            file_name=f"melody_info_{message[:10].replace(' ', '_')}.txt",
+                            mime="text/plain",
+                            use_container_width=True
+                        )
+                    
+                    # Tips for next generation
+                    st.info("💡 **Try this:** Change the key or style for a completely different melody of the same message!")
+                    
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
-                    st.write("Please check your settings and try again.")
+                    st.error(f"❌ Error generating melody: {str(e)}")
+                    st.write("Please try again with different settings.")
         else:
             st.warning("⚠️ Please enter a message to encode.")
+    
+    # Quick examples section
+    st.subheader("🎯 Quick Examples")
+    example_cols = st.columns(4)
+    
+    with example_cols[0]:
+        if st.button("🌟 'Hope' in C Major Classical", use_container_width=True):
+            st.session_state.update({
+                'message': 'Hope',
+                'key': MusicKey.C_MAJOR,
+                'style': MusicStyle.CLASSICAL
+            })
+            st.rerun()
+    
+    with example_cols[1]:
+        if st.button("🎸 'Love' in G Major Folk", use_container_width=True):
+            st.session_state.update({
+                'message': 'Love',
+                'key': MusicKey.G_MAJOR,
+                'style': MusicStyle.FOLK
+            })
+            st.rerun()
+    
+    with example_cols[2]:
+        if st.button("🎺 'Jazz' in A Minor Jazz", use_container_width=True):
+            st.session_state.update({
+                'message': 'Jazz',
+                'key': MusicKey.A_MINOR,
+                'style': MusicStyle.JAZZ
+            })
+            st.rerun()
+    
+    with example_cols[3]:
+        if st.button("🌙 'Dream' in C Pentatonic Ambient", use_container_width=True):
+            st.session_state.update({
+                'message': 'Dream',
+                'key': MusicKey.C_PENTATONIC,
+                'style': MusicStyle.AMBIENT
+            })
+            st.rerun()
 
-# ---------------------- DECODER TAB ----------------------
-with tab2:
-    st.header("🔍 Message Decoder & Musical Analysis")
-    
-    uploaded_midi = st.file_uploader(
-        "Upload MIDI File to Decode", 
-        type=["mid", "midi"],
-        help="Upload a MIDI file created by this tool to decode the hidden message"
-    )
-    
-    if uploaded_midi is not None:
-        st.info("🔬 Analyzing uploaded MIDI file...")
+    # Sidebar with information
+    with st.sidebar:
+        st.header("🎵 About This Tool")
         
-        try:
-            mid = mido.MidiFile(file=uploaded_midi)
-            
-            # MIDI analysis
-            ticks_per_beat = mid.ticks_per_beat
-            note_events = []
-            
-            # Track information
-            st.subheader("📊 MIDI File Information")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("Number of Tracks", len(mid.tracks))
-            with col2:
-                st.metric("Ticks Per Beat", ticks_per_beat)
-            with col3:
-                total_time = sum(msg.time for track in mid.tracks for msg in track)
-                st.metric("Total Ticks", total_time)
-            
-            # Extract melody track
-            melody_track = None
-            for i, track in enumerate(mid.tracks):
-                has_notes = any(msg.type in ['note_on', 'note_off'] for msg in track)
-                if has_notes:
-                    melody_track = track
-                    st.write(f"🎵 Using track {i} for melody analysis")
-                    break
-            
-            if melody_track:
-                # Extract note events
-                current_time = 0
-                for msg in melody_track:
-                    current_time += msg.time
-                    if msg.type == 'note_on' and msg.velocity > 0:
-                        note_events.append((msg.note, current_time, "on"))
-                    elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-                        note_events.append((msg.note, current_time, "off"))
-                
-                # Process note durations
-                active_notes = {}
-                note_durations = []
-                
-                for note, time, state in note_events:
-                    if state == "on":
-                        active_notes[note] = time
-                    elif state == "off" and note in active_notes:
-                        start_time = active_notes[note]
-                        duration = time - start_time
-                        note_durations.append((start_time, duration))
-                        del active_notes[note]
-                
-                note_durations.sort()
-                
-                if note_durations:
-                    # Decode morse
-                    durations = [dur for _, dur in note_durations]
-                    min_duration = min(durations)
-                    base_unit = min_duration
-                    
-                    morse_symbols = []
-                    current_morse_letter = ""
-                    
-                    for i, (start_time, duration) in enumerate(note_durations):
-                        if duration <= base_unit * 1.8:
-                            symbol = "."
-                        elif duration <= base_unit * 4.5:
-                            symbol = "-"
-                        else:
-                            symbol = "?"
-                        
-                        current_morse_letter += symbol
-                        
-                        if i < len(note_durations) - 1:
-                            note_end = start_time + duration
-                            next_start = note_durations[i + 1][0]
-                            gap = next_start - note_end
-                            
-                            letter_gap_threshold = base_unit * 2.5
-                            word_gap_threshold = base_unit * 5.5
-                            
-                            if gap >= word_gap_threshold:
-                                if current_morse_letter:
-                                    morse_symbols.append(current_morse_letter)
-                                    current_morse_letter = ""
-                                morse_symbols.append("/")
-                            elif gap >= letter_gap_threshold:
-                                if current_morse_letter:
-                                    morse_symbols.append(current_morse_letter)
-                                    current_morse_letter = ""
-                        else:
-                            if current_morse_letter:
-                                morse_symbols.append(current_morse_letter)
-                    
-                    # Display results
-                    morse_display = ""
-                    for i, symbol in enumerate(morse_symbols):
-                        if symbol == "/":
-                            morse_display += " / "
-                        else:
-                            morse_display += symbol
-                            if i < len(morse_symbols) - 1 and morse_symbols[i + 1] != "/":
-                                morse_display += " "
-                    
-                    st.subheader("📻 Decoded Morse Code")
-                    st.code(morse_display.strip())
-                    
-                    # Decode to text
-                    decoded_text = ""
-                    words = morse_display.strip().split(" / ")
-                    
-                    for word_morse in words:
-                        letters = word_morse.strip().split(" ")
-                        word_text = ""
-                        for letter_morse in letters:
-                            if letter_morse.strip():
-                                decoded_char = REVERSE_MORSE.get(letter_morse.strip(), "?")
-                                word_text += decoded_char
-                        if word_text:
-                            decoded_text += word_text + " "
-                    
-                    st.subheader("🎯 Hidden Message Revealed")
-                    st.success(f"**{decoded_text.strip().upper()}**")
-                    
-                    # Web audio playback for uploaded file
-                    st.subheader("🎧 Listen to Uploaded Composition")
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mid') as tmp_file:
-                        tmp_file.write(uploaded_midi.getvalue())
-                        tmp_midi_path = tmp_file.name
-                    
-                    uploaded_midi_json = midi_to_json(tmp_midi_path)
-                    uploaded_audio_player = create_audio_player(uploaded_midi_json, 120)
-                    st.components.v1.html(uploaded_audio_player, height=200)
-                    
-                    # Clean up temp file
-                    try:
-                        os.unlink(tmp_midi_path)
-                    except:
-                        pass
-                    
-                    # Detailed analysis
-                    with st.expander("🔍 Detailed Analysis"):
-                        st.write("**Note Statistics:**")
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Total Notes", len(note_durations))
-                        with col2:
-                            st.metric("Shortest Note", f"{min(durations)} ticks")
-                        with col3:
-                            st.metric("Longest Note", f"{max(durations)} ticks")
-                        
-                        st.write("**Letter-by-letter Breakdown:**")
-                        for i, word_morse in enumerate(words):
-                            st.write(f"**Word {i+1}:** `{word_morse}`")
-                            letters = word_morse.strip().split(" ")
-                            for letter_morse in letters:
-                                if letter_morse.strip():
-                                    decoded_char = REVERSE_MORSE.get(letter_morse.strip(), "?")
-                                    st.write(f"  `{letter_morse}` → **{decoded_char}**")
-                else:
-                    st.error("❌ No notes found in the melody track.")
-            else:
-                st.error("❌ No tracks with musical notes found in this MIDI file.")
+        st.markdown("""
+        **🧠 Intelligent Melody Generation**
         
-        except Exception as e:
-            st.error(f"❌ Error analyzing MIDI file: {str(e)}")
+        This tool uses advanced musical AI to create genuinely beautiful melodies that encode your secret messages.
+        
+        **✨ Key Features:**
+        - Real musical intelligence
+        - Natural phrase contours
+        - Style-aware generation
+        - Intelligent interval selection
+        - Harmonic awareness
+        
+        **🎼 Musical Styles:**
+        - **Classical:** Traditional, elegant arcs
+        - **Folk:** Simple, memorable patterns  
+        - **Jazz:** Sophisticated, unexpected
+        - **Celtic:** Flowing, modal sounds
+        - **Ambient:** Gentle, floating phrases
+        
+        **🎹 Different Every Time:**
+        Each generation creates a unique melody, even for the same text. The AI considers musical context, phrase structure, and style to create genuinely musical results.
+        """)
+        
+        st.header("🔍 How It Works")
+        st.markdown("""
+        **🎯 Musical Intelligence:**
+        1. Converts your text to Morse code
+        2. Creates natural phrase arcs
+        3. Chooses notes using music theory
+        4. Avoids repetitive patterns
+        5. Generates complementary harmony
+        
+        **🎨 Each style has:**
+        - Unique interval preferences
+        - Different phrase contours
+        - Style-specific chord progressions
+        - Appropriate tempo and dynamics
+        """)
+        
+        st.header("💡 Tips")
+        st.markdown("""
+        **For Best Results:**
+        - Try the same message in different keys
+        - Experiment with various styles
+        - Use shorter messages for clarity
+        - Enable harmony for richer sound
+        
+        **🎵 Musical Tip:**
+        The same message sounds completely different in each key and style - try them all!
+        """)
 
-# ---------------------- SIDEBAR ----------------------
-with st.sidebar:
-    st.header("ℹ️ About This Tool")
-    st.write("""
-    This enhanced Morse melody studio allows you to:
-    
-    **🎵 Compose:**
-    - Encode secret messages in musical melodies
-    - Add harmony, bass lines, and drums
-    - Choose from various instruments and scales
-    - Control tempo and musical style
-    
-    **🔍 Decode:**
-    - Upload MIDI files to reveal hidden messages
-    - Analyze musical structure
-    - View detailed morse code breakdown
-    
-    **🎼 Musical Features:**
-    - Multiple instrument tracks
-    - Chord progressions and harmony
-    - Bass lines with musical patterns
-    - Optional drum tracks
-    - Multiple musical scales
-    - Customizable tempo and key
-    
-    **🔒 Security:**
-    - Messages are encoded in the melody timing
-    - Additional musical elements don't affect the message
-    - Only those who know the encoding can decode
-    """)
-    
-    st.header("🎹 Quick Tips")
-    st.write("""
-    **For Best Results:**
-    - Keep messages concise for better musical flow
-    - Try different scales for various moods
-    - Use harmony and bass for richer sound
-    - Experiment with different instruments
-    
-    **Preset Suggestions:**
-    - 🎹 **Piano Ballad**: Emotional, slow pieces
-    - 🎸 **Folk Song**: Simple, acoustic feel  
-    - 🎺 **Jazz Standard**: Complex, sophisticated
-    - 🌙 **Ambient**: Atmospheric, spacey
-    """)
-    
-    st.header("🎵 Morse Code Reference")
-    with st.expander("View Morse Code Chart"):
-        morse_chart = """
-        A: .-    B: -...  C: -.-.  D: -..   E: .
-        F: ..-.  G: --.   H: ....  I: ..    J: .---
-        K: -.-   L: .-..  M: --    N: -.    O: ---
-        P: .--.  Q: --.-  R: .-.   S: ...   T: -
-        U: ..-   V: ...-  W: .--   X: -..-  Y: -.--
-        Z: --..
-        
-        0: -----  1: .----  2: ..---  3: ...--  4: ....-
-        5: .....  6: -....  7: --...  8: ---..  9: ----.
-        """
-        st.code(morse_chart)
-    
-    st.header("💡 Platform Notes")
-    st.info("""
-    **Enhanced Audio Playback:**
-    - Web Audio API creates real-time synthesis
-    - Works on all modern browsers
-    - No additional software required
-    - High-quality sound generation
-    
-    MIDI files also work in any music software!
-    """)
-    
-    st.header("🚀 What's New")
-    st.success("""
-    **Enhanced Features:**
-    - 🎧 **Web Audio Playback** - Listen in any browser
-    - Better melody generation with music theory
-    - More musical scales and chord progressions
-    - Enhanced instruments and arrangements
-    - Improved user interface
-    - Cloud deployment ready
-    """)
+if __name__ == "__main__":
+    main()
