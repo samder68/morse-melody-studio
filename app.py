@@ -966,25 +966,151 @@ def generate_educational_analysis(melody_notes: List[Note], message: str, key_in
 3. HARMONY: Observe chord progressions that support the melody
 4. FORM: Watch how letters create musical phrases
 
-🎯 EXPERIMENT IDEAS:
-------------------
-• Try the same message in different musical keys
-• Compare how different styles (Jazz vs Classical) sound
-• Analyze which letters create the most interesting melodies
-• Study how chord progressions support the secret message
+🏆 CREATIVE CHALLENGES & CONTESTS:
+=================================
 
-💡 MUSIC THEORY CONNECTIONS:
----------------------------
-• Morse Code = Rhythm Patterns
-• Letters = Melodic Motifs  
-• Words = Musical Phrases
-• Message = Complete Song Form
+🎯 CHALLENGE 1: "MELODY MASTERMIND"
+----------------------------------
+Contest: Who can create the most beautiful melody with a coherent sentence?
+
+RULES:
+• Create a meaningful sentence (not random words)
+• Generate melodies in different keys/styles
+• Judge based on:
+  - Musical beauty and flow
+  - Sentence meaning and creativity
+  - How well the morse rhythm works musically
+  - Overall artistic merit
+
+TIPS FOR WINNING:
+• Try sentences with varied letter patterns
+• Letters like E, T, A (simple morse) create smooth melodies
+• Mix short words (E, I, A) with longer words for rhythm variety
+• Avoid too many letters with complex morse (Q, X, Y)
+
+EXAMPLE SENTENCES TO TRY:
+• "Music heals the heart"
+• "Dreams take flight"  
+• "Art creates magic"
+• "Hope lights the path"
+
+🎼 CHALLENGE 2: "REMIX THE CLASSICS"
+------------------------------------
+Advanced Challenge: Take existing songs and encode messages!
+
+HOW TO PLAY:
+1. Take the sheet music from a famous song
+2. Keep the pitches (notes) exactly the same
+3. Change ONLY the rhythm/timing to spell morse code words
+4. See how it transforms the original song!
+
+EXAMPLE: "Happy Birthday"
+• Original: ♩ ♩ ♪♪ ♩ - ♩ ♩ ♪♪ ♩
+• Modified: Make the rhythm spell "HAPPY" in morse:
+  H = .... (4 short notes)
+  A = .- (short-long)
+  P = .--. (short-long-long-short)
+  P = .--. (short-long-long-short)  
+  Y = -.-- (long-short-long-long)
+
+CHALLENGE VARIATIONS:
+• "Twinkle Twinkle Little Star" → encode "TWINKLE"
+• "Mary Had a Little Lamb" → encode "MARY"
+• Any melody → encode your name!
+
+🎨 ADVANCED EXPERIMENTS:
+=======================
+
+🔬 EXPERIMENT 1: "LETTER PERSONALITY STUDY"
+• Generate the same letter in different keys
+• Question: Does 'A' sound happy in C Major but sad in A Minor?
+• Study: How do different scales affect letter personalities?
+
+🔬 EXPERIMENT 2: "RHYTHM PSYCHOLOGY" 
+• Create words with mostly dots vs mostly dashes
+• Compare: "FEED" (all dots/simple) vs "ZOOM" (more dashes)
+• Question: Do dot-heavy words sound more energetic?
+
+🔬 EXPERIMENT 3: "MUSICAL CRYPTOGRAPHY"
+• Hide multiple messages in one song using different instruments
+• Melody = Message 1, Bass = Message 2, Harmony = Message 3
+• Create musical conversations between parts!
+
+🎯 EDUCATIONAL GAMES:
+====================
+
+🎮 GAME 1: "MORSE MELODY DETECTIVE"
+• Play melodies without showing the text
+• Students guess the hidden message
+• Points for correct letters/words
+
+🎮 GAME 2: "STYLE TRANSFORMATION CHALLENGE"
+• Same message in 5 different styles
+• Students identify which is Classical, Jazz, Folk, etc.
+• Discuss how style changes perception of same text
+
+🎮 GAME 3: "COMPOSE THE SECRET CODE"
+• Give students a mission briefing
+• They must compose a song that secretly spells coordinates
+• Others decode to find the "treasure location"
+
+💡 RESEARCH QUESTIONS FOR STUDENTS:
+==================================
+
+🔍 MUSICOLOGY RESEARCH:
+• Which letters create the most pleasing melodies?
+• How do cultural musical preferences affect morse melody perception?
+• Can you identify musical "accents" in different morse styles?
+
+🔍 PSYCHOLOGY RESEARCH:
+• Do people remember messages better when they're melodies?
+• Which musical keys make messages sound more urgent/calm?
+• How does tempo affect message comprehension?
+
+🔍 TECHNOLOGY RESEARCH:
+• Could this be used for accessible communication?
+• What if we encoded morse in rhythm instead of pitch?
+• How would this work with different instruments?
+
+🎓 CLASSROOM ACTIVITIES:
+=======================
+
+📚 FOR MUSIC TEACHERS:
+• Use this to teach rhythm, note reading, and composition
+• Students compose "musical diary entries"
+• Create class songs where each student adds a musical sentence
+
+📚 FOR HISTORY TEACHERS:
+• Encode historical quotes and dates
+• Students decode messages from different time periods
+• Combine with lessons on telegraph and communication history
+
+📚 FOR LANGUAGE ARTS:
+• Write poems that also sound musical when encoded
+• Explore how rhythm affects meaning in both poetry and music
+• Study the relationship between language patterns and musical patterns
+
+🌟 PROFESSIONAL APPLICATIONS:
+============================
+
+🎼 FOR COMPOSERS:
+• Use morse code as inspiration for rhythmic patterns
+• Encode song titles or dedications into the music itself
+• Create "musical signatures" using your name in morse
+
+🎭 FOR PERFORMERS:
+• Add secret messages in performances
+• Use this technique for musical theater or film scoring
+• Create interactive performances where audience decodes messages
 
 This melody demonstrates how ANY text can become music using
 mathematical relationships and musical intelligence!
 
+The possibilities are truly endless - you've created not just a 
+secret message tool, but a complete musical-educational platform!
+
 Generated by Intelligent Morse Melody Studio
-Perfect for Music Education & Secret Communication!
+Perfect for Music Education & Creative Exploration!
 """
     
     return analysis
@@ -1220,15 +1346,21 @@ def main():
                         import time
                         song_id = f"song_{int(time.time()) % 100000:05d}"
                         
-                        # Store generated data in session state to prevent regeneration
-                        st.session_state['current_midi_data'] = midi_data
-                        st.session_state['current_wav_data'] = wav_data
-                        st.session_state['current_score_text'] = score_text
-                        st.session_state['current_svg_sheet'] = svg_sheet_music
-                        st.session_state['current_analysis_text'] = analysis_text
-                        st.session_state['current_song_id'] = song_id
-                        st.session_state['current_key_name'] = key.name
-                        st.session_state['current_style_name'] = style.name
+                        # Store in session state immediately after generation
+                        st.session_state.update({
+                            'melody_generated': True,
+                            'current_midi_data': midi_data,
+                            'current_wav_data': wav_data,
+                            'current_score_text': score_text,
+                            'current_svg_sheet': svg_sheet_music,
+                            'current_analysis_text': analysis_text,
+                            'current_song_id': song_id,
+                            'current_key_name': key.name,
+                            'current_style_name': style.name,
+                            'current_message': message,
+                            'current_melody_notes': len(melody_notes),
+                            'current_harmony': 'Yes' if harmony_notes else 'No'
+                        })
                         
                         # Success message
                         st.success("✨ **Beautiful melody created!**")
